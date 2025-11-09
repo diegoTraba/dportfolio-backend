@@ -117,10 +117,15 @@ app.get("/balance/:userId", async (req, res, next) => {
       .eq("is_active", true)
       .single();
 
-    if (error) {
-      console.error("Error en consulta Supabase:", error);
-      return res.status(500).json({ error: "Error al consultar la base de datos" });
-    }
+      if (error) {
+        console.error("❌ Error en consulta Supabase:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        return res.status(500).json({ error: "Error al consultar la base de datos" });
+      }
 
     if (!connection) {
       return res.status(404).json({ 
