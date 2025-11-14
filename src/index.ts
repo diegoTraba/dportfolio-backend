@@ -159,6 +159,24 @@ app.get("/balance/:userId", async (req, res, next) => {
 });
 
 /**
+ * @route GET /debug-cors
+ * @description Endpoint para debug de CORS
+ * @access Público
+ */
+app.get("/debug-cors", (req, res) => {
+  res.json({
+    message: "✅ CORS debug endpoint",
+    origin: req.headers.origin,
+    allowedOrigins: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://dportfolio-backend-production.up.railway.app'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
  * @route GET /exchanges/:userId
  * @description Obtiene información de las conexiones de exchange de un usuario
  * @param {string} userId - ID del usuario
