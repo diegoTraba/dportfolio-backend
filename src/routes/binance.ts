@@ -1,68 +1,141 @@
-import express from 'express'
+import express, { Request, Response } from 'express';
 import { getSupabaseClient } from '../lib/supabase.js'
-import { decrypt } from '../lib/encriptacion.js'
-import { binanceService } from '../services/servicioBinance.js'
+import { encrypt, decrypt } from '../lib/encriptacion.js'
+import { binanceService, BinanceCredentials } from '../services/servicioBinance.js'
 
-export const binanceRouter = express.Router()
+const binanceRouter = express.Router()
 
-binanceRouter.get('/balance', async (req, res) => {
+// Conexion a binance
+binanceRouter.post('/connect', async (req: Request, res: Response) => {
   try {
-    const userId = req.query.userId as string
+    console.log('=== CONEXIÓN BINANCE - BACKEND ===');
+    
+    const { apiKey, apiSecret, userId } = req.body;
+
+    console.log('Datos recibidos:', {
+      userId,
+      apiKey: apiKey ? `...${apiKey.slice(-4)}` : 'undefined'
+    });
+
     if (!userId) {
-      return res.json({ totalBalance: 0, connected: false, exchangesCount: 0 })
+      return res.status(401).json({ error: 'Usuario no identificado' });
     }
 
-    const supabase = getSupabaseClient()
+    if (!apiKey || !apiSecret) {
+      return res.status(400).json({ error: 'API Key y Secret son requeridos' });
+    }
 
-    const { data: connection, error: connectionError } = await supabase
+    // Probar conexión con Binance
+    const credentials: BinanceCredentials = {
+      apiKey: apiKey,
+      apiSecret: apiSecret,
+    };
+    const isValid = await binanceService.testConnection(credentials);
+    
+    if (!isValid) {
+      return res.status(401).json({ error: 'Credenciales de Binance inválidas' });
+    }
+
+    // Encriptar credenciales
+    const encryptedApiKey = encrypt(apiKey);
+    const encryptedApiSecret = encrypt(apiSecret);
+
+    // Guardar en base de datos
+    const supabase = getSupabaseClient();
+    const { data: exchange, error: exchangeError } = await supabase
+      .from('exchanges')
+      .upsert({
+        user_id: userId,
+        exchange: 'BINANCE',
+        api_key: encryptedApiKey,
+        api_secret: encryptedApiSecret,
+        is_active: true,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (exchangeError) {
+      console.error('Error saving exchange:', exchangeError);
+      return res.status(500).json({ 
+        error: 'Error al guardar la conexión en la base de datos' 
+      });
+    }
+
+    // Obtener balance total
+    const totalBalance = await binanceService.getTotalUSDBalance(credentials);
+
+    console.log('=== CONEXIÓN EXITOSA ===');
+    return res.json({ 
+      success: true, 
+      totalBalance,
+      message: 'Binance conectado correctamente' 
+    });
+
+  } catch (error) {
+    console.error('Error en conexión Binance:', error);
+    return res.status(500).json({ 
+      error: 'Error al conectar con Binance. Verifica tus credenciales.' 
+    });
+  }
+});
+
+//obtener balance de la cuenta
+binanceRouter.get('/balance/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    // Obtener credenciales de Binance del usuario
+    const supabase = getSupabaseClient();
+    const { data: exchange, error } = await supabase
       .from('exchanges')
       .select('*')
       .eq('user_id', userId)
       .eq('exchange', 'BINANCE')
       .eq('is_active', true)
-      .single()
+      .single();
 
-    if (connectionError || !connection) {
-      console.warn('⚠️ No hay conexión activa de Binance para el usuario:', userId)
-      return res.json({ totalBalance: 0, connected: false, exchangesCount: 0 })
+    if (error || !exchange) {
+      return res.json({
+        totalBalance: 0,
+        connected: false,
+        exchangesCount: 0
+      });
     }
 
-    const apiKey = decrypt(connection.api_key)
-    const apiSecret = decrypt(connection.api_secret)
+    // Desencriptar credenciales
+    const decryptedApiKey = decrypt(exchange.api_key);
+    const decryptedApiSecret = decrypt(exchange.api_secret);
 
-    const totalBalance = await binanceService.getTotalUSDBalance({ apiKey, apiSecret })
+    // Obtener balance actual
+    const credentials: BinanceCredentials = {
+      apiKey: decryptedApiKey,
+      apiSecret: decryptedApiSecret,
+    };
+    const totalBalance = await binanceService.getTotalUSDBalance(credentials);
 
-    const { data: exchanges } = await supabase
+    // Contar exchanges conectados
+    const { data: exchanges, count: exchangesCount } = await supabase
       .from('exchanges')
-      .select('exchange')
+      .select('*', { count: 'exact' })
       .eq('user_id', userId)
-      .eq('is_active', true)
+      .eq('is_active', true);
 
-    res.json({
+    return res.json({
       totalBalance,
       connected: true,
-      exchangesCount: exchanges?.length || 0,
-    })
+      exchangesCount: exchangesCount || 0
+    });
+
   } catch (error) {
-    console.error('❌ Error en /balance:', error)
-    res.status(500).json({
+    console.error('Error obteniendo balance:', error);
+    return res.json({
       totalBalance: 0,
       connected: false,
-      exchangesCount: 0,
-      error: 'Error al obtener balance',
-    })
+      exchangesCount: 0
+    });
   }
-})
+});
 
-// Endpoint de diagnóstico opcional
-binanceRouter.get('/diagnostic', async (_req, res) => {
-  try {
-    const response = await fetch('https://api.binance.com/api/v3/ping')
-    const status = response.ok ? '✅ OK' : `❌ ${response.status}`
-    res.json({ binanceAPI: status })
-  } catch (err) {
-    res.status(500).json({ error: '❌ No se pudo conectar a Binance', details: String(err) })
-  }
-})
-
+export default binanceRouter;
 

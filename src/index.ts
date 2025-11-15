@@ -11,6 +11,9 @@ import { getSupabaseClient } from "./lib/supabase";
 import { binanceService, BinanceCredentials } from "./services/servicioBinance";
 import { decrypt } from "./lib/encriptacion";
 
+// Rutas
+import binanceRoutes from './routes/binance';
+
 // Configuración de variables de entorno
 dotenv.config();
 
@@ -39,6 +42,9 @@ app.use(cors({
 
 // Parseo de JSON con límite de tamaño
 app.use(express.json({ limit: '10mb' }));
+
+// Registrar rutas de Binance
+app.use('/api/binance', binanceRoutes);
 
 // =============================================================================
 // MIDDLEWARE DE LOGGING (solo en desarrollo)
