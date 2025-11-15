@@ -157,6 +157,8 @@ app.get("/balance/:userId", async (req, res, next) => {
 
     res.json({ 
       totalUSD,
+      connected: true,
+      exchangesCount: 1,
       currency: "USD",
       lastUpdated: new Date().toISOString()
     });
