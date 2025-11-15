@@ -97,76 +97,6 @@ app.get("/health", (req, res) => {
 });
 
 /**
- * @route GET /balance/:userId
- * @description Obtiene el balance total en USD de una cuenta de Binance
- * @param {string} userId - ID del usuario en la base de datos
- * @returns {Object} balance total en USD
- * @access Privado (requiere userId válido)
- */
-app.get("/balance/:userId", async (req, res, next) => {
-  const userId = req.params.userId;
-  
-  // Validación básica del parámetro
-  if (!userId || userId.trim().length === 0) {
-    return res.status(400).json({ error: "El userId es requerido" });
-  }
-
-  try {
-    const supabase = getSupabaseClient();
-
-    // Buscar conexión activa de Binance para el usuario
-    const { data: connection, error } = await supabase
-      .from("exchanges")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("exchange", "BINANCE")
-      .eq("is_active", true)
-      .single();
-
-      if (error) {
-        console.error("❌ Error en consulta Supabase:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        return res.status(500).json({ error: "Error al consultar la base de datos" });
-      }
-
-    if (!connection) {
-      return res.status(404).json({ 
-        error: "No se encontró una conexión activa de Binance para este usuario",
-        userId 
-      });
-    }
-
-    // Preparar credenciales desencriptadas
-    const credentials: BinanceCredentials = {
-      apiKey: decrypt(connection.api_key),
-      apiSecret: decrypt(connection.api_secret),
-    };
-
-    // Obtener balance total desde Binance
-    const totalUSD = await binanceService.getTotalUSDBalance(credentials);
-
-    // Log de auditoría (sin información sensible)
-    console.log(`Balance consultado para usuario ${userId}: ${totalUSD} USD`);
-
-    res.json({ 
-      totalUSD,
-      connected: true,
-      exchangesCount: 1,
-      currency: "USD",
-      lastUpdated: new Date().toISOString()
-    });
-
-  } catch (err) {
-    console.error(`Error en endpoint /balance/${userId}:`, err);
-    next(err); // Pasar al middleware de manejo de errores
-  }
-});
-
-/**
  * @route GET /debug-cors
  * @description Endpoint para debug de CORS
  * @access Público
@@ -182,40 +112,6 @@ app.get("/debug-cors", (req, res) => {
     ],
     timestamp: new Date().toISOString()
   });
-});
-
-/**
- * @route GET /exchanges/:userId
- * @description Obtiene información de las conexiones de exchange de un usuario
- * @param {string} userId - ID del usuario
- * @access Privado
- */
-app.get("/exchanges/:userId", async (req, res, next) => {
-  const userId = req.params.userId;
-
-  try {
-    const supabase = getSupabaseClient();
-
-    const { data: connections, error } = await supabase
-      .from("exchanges")
-      .select("exchange, is_active, created_at")
-      .eq("user_id", userId);
-
-    if (error) {
-      console.error("Error consultando exchanges:", error);
-      return res.status(500).json({ error: "Error al consultar exchanges" });
-    }
-
-    res.json({ 
-      userId,
-      exchanges: connections || [],
-      count: connections?.length || 0
-    });
-
-  } catch (err) {
-    console.error(`Error en endpoint /exchanges/${userId}:`, err);
-    next(err);
-  }
 });
 
 // =============================================================================
