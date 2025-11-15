@@ -31,9 +31,6 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // CORS configurado para producción/desarrollo
 app.use(cors({
-  // origin: isProduction 
-  //   ? process.env.ALLOWED_ORIGINS?.split(',') || [] // En producción, solo dominios permitidos
-  //   : ['http://localhost:3000', 'http://localhost:5173'], // En desarrollo, permitir localhost
   origin: "*",
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
