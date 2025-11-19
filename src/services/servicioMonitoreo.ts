@@ -103,6 +103,7 @@ export class MonitorService {
       }
 
       if (!alertas || alertas.length === 0) {
+        console.error('Error obteniendo alertas:', error);
         return;
       }
 
@@ -135,10 +136,11 @@ export class MonitorService {
           if (!updateError) {
             console.log(`Alerta ${alerta.id} activada! ${alerta.criptomoneda} alcanzó ${currentPrice}`);
             // Aquí podrías añadir notificaciones push, emails, etc.
-          } else{
-            console.log(`Alerta ${alerta.id} no activada! ${alerta.criptomoneda} alcanzó ${currentPrice}`);
-          }
+          } 
         }
+        else{
+            console.log(`Alerta ${alerta.id} no activada! ${alerta.criptomoneda} no alcanzó ${currentPrice}`);
+          }
       }
     } catch (error) {
       console.error('Error verificando alertas:', error);
