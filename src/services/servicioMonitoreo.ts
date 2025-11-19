@@ -156,7 +156,7 @@ private async checkAlerts(prices: { [key: string]: PriceData }) {
             .from('alertas')
             .update({ 
               estado: 'activo',
-              activado_en: new Date().toISOString(),
+              activado: new Date().toISOString(),
               precio_actual: currentPrice
             })
             .eq('id', alerta.id);
