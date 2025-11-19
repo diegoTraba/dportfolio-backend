@@ -13,6 +13,7 @@ import { decrypt } from "./lib/encriptacion";
 
 // Rutas
 import binanceRoutes from './routes/binance';
+import { monitorService } from './services/servicioMonitoreo';
 
 // Configuración de variables de entorno
 dotenv.config();
@@ -142,6 +143,11 @@ const server = app.listen(port, () => {
 ⏰ Iniciado: ${new Date().toISOString()}
   `);
 });
+
+// Iniciar el monitoreo de precios cuando el servidor arranque
+monitorService.startPriceMonitoring((prices) => {
+  console.log('Precios actualizados:', prices);
+}, 60000); // Cada 60 segundos
 
 process.on('SIGINT', () => {
   console.log('Recibida señal SIGINT, cerrando servidor...');

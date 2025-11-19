@@ -388,6 +388,79 @@ class BinanceService {
     }
   }
 
+   // ===========================================================================
+  // MÉTODOS PARA PRECIOS Y ALERTAS
+  // ===========================================================================
+
+  /**
+   * Obtener el precio actual de un símbolo (público - no necesita autenticación)
+   */
+  async getPrice(symbol: string): Promise<number> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v3/ticker/price?symbol=${symbol}`);
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json() as TickerPrice;
+      return parseFloat(data.price);
+    } catch (error) {
+      console.error(`Error obteniendo precio para ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener múltiples precios a la vez (público)
+   */
+  async getMultiplePrices(symbols: string[]): Promise<{ [key: string]: number }> {
+    try {
+      const prices: { [key: string]: number } = {};
+      
+      // Usar Promise.all para obtener todos los precios en paralelo
+      const pricePromises = symbols.map(async (symbol) => {
+        try {
+          const price = await this.getPrice(symbol);
+          return { symbol, price };
+        } catch (error) {
+          console.error(`Error obteniendo precio para ${symbol}:`, error);
+          return { symbol, price: 0 };
+        }
+      });
+
+      const results = await Promise.all(pricePromises);
+      
+      results.forEach(result => {
+        prices[result.symbol] = result.price;
+      });
+
+      return prices;
+    } catch (error) {
+      console.error("Error obteniendo múltiples precios:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Método makeRequest genérico para requests públicos
+   */
+  private async makeRequest(endpoint: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error en makeRequest para ${endpoint}:`, error);
+      throw error;
+    }
+  }
+
+
   // ===========================================================================
   // MÉTODOS DE AUTENTICACIÓN
   // ===========================================================================
