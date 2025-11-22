@@ -126,7 +126,7 @@ alertasRouter.put("/:id", async (req: Request, res: Response) => {
     const { id } = req.params;
     const { criptomoneda, condicion, precio_objetivo, precio_actual } = req.body;
 
-    if (!criptomoneda || !condicion || !precio_objetivo) {
+    if (!criptomoneda || !condicion || !precio_objetivo || !precio_actual) {
       return res.status(400).json({ error: "Faltan campos requeridos" });
     }
 
@@ -137,8 +137,7 @@ alertasRouter.put("/:id", async (req: Request, res: Response) => {
         criptomoneda,
         condicion,
         precio_objetivo,
-        precio_actual,
-        updated_at: new Date().toISOString(),
+        precio_actual
       })
       .eq("id", id)
       .select()
