@@ -73,8 +73,7 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
       .from("alertas")
       .update({ 
         estado: 'pendiente',
-        activado: null,
-        precio_actual: null
+        activado: null
       })
       .eq("id", id)
       .select()
