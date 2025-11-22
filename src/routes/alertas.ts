@@ -59,9 +59,10 @@ alertasRouter.get("/detalle/:id", async (req: Request, res: Response) => {
 // Crear nueva alerta
 alertasRouter.post("/", async (req: Request, res: Response) => {
   try {
-    const { userId, criptomoneda, condicion, precio_objetivo, precio_actual, creado } = req.body;
+    const { userId, criptomoneda, condicion, estado, precio_objetivo, precio_actual, creado } = req.body;
 
     if (!userId || !criptomoneda || !condicion || !precio_objetivo || !precio_actual || !creado) {
+      console.log("alerta: "+ criptomoneda +"; condicion: "+ condicion +"; user_id: "+userId +"; estado: "+estado+"; precio_actual: "+precio_actual+"; precio_objetivo: "+ precio_objetivo+"; creado: "+creado);
       return res.status(400).json({ error: "Faltan campos requeridos" });
     }
 
