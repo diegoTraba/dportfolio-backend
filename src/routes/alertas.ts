@@ -28,6 +28,34 @@ alertasRouter.get("/:userId", async (req: Request, res: Response) => {
   }
 });
 
+// Obtener detalle de una alerta específica
+alertasRouter.get("/detalle/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const supabase = getSupabaseClient();
+    const { data: alerta, error } = await supabase
+      .from("alertas")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      console.error("Error obteniendo alerta:", error);
+      return res.status(500).json({ error: "Error al obtener la alerta" });
+    }
+
+    if (!alerta) {
+      return res.status(404).json({ error: "Alerta no encontrada" });
+    }
+
+    return res.json(alerta);
+  } catch (error) {
+    console.error("Error obteniendo alerta:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
 // Crear nueva alerta
 alertasRouter.post("/", async (req: Request, res: Response) => {
   try {
@@ -87,6 +115,40 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error reactivando alerta:", error);
     return res.status(500).json({ error: "Error al reactivar alerta" });
+  }
+});
+
+// Actualizar una alerta existente
+alertasRouter.put("/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { criptomoneda, condicion, precio_objetivo } = req.body;
+
+    if (!criptomoneda || !condicion || !precio_objetivo) {
+      return res.status(400).json({ error: "Faltan campos requeridos" });
+    }
+
+    const supabase = getSupabaseClient();
+    const { data: alerta, error } = await supabase
+      .from("alertas")
+      .update({
+        criptomoneda,
+        condicion,
+        precio_objetivo,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json(alerta);
+  } catch (error) {
+    console.error("Error actualizando alerta:", error);
+    return res.status(500).json({ error: "Error al actualizar alerta" });
   }
 });
 
