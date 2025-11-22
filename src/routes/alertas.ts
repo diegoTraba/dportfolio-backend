@@ -76,7 +76,8 @@ alertasRouter.post("/", async (req: Request, res: Response) => {
           condicion,
           precio_objetivo: precio_objetivo,
           precio_actual: precio_actual,
-          estado: 'pendiente'
+          estado: 'pendiente',
+          creado: creado
         }
       ])
       .select()
