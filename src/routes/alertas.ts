@@ -14,7 +14,7 @@ alertasRouter.get("/:userId", async (req: Request, res: Response) => {
       .from("alertas")
       .select("*")
       .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+      .order("creado", { ascending: false });
 
     if (error) {
       console.error("Error obteniendo alertas:", error);
@@ -73,7 +73,7 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
       .from("alertas")
       .update({ 
         estado: 'pendiente',
-        activado_en: null,
+        activado: null,
         precio_actual: null
       })
       .eq("id", id)
