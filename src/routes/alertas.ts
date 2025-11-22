@@ -17,10 +17,11 @@ alertasRouter.get("/:userId", async (req: Request, res: Response) => {
       .order("created_at", { ascending: false });
 
     if (error) {
-      throw error;
+      console.error("Error obteniendo alertas:", error);
+      return res.status(500).json({ error: "Error al obtener alertas" });
     }
 
-    return res.json(alertas);
+    return res.json(alertas || []);
   } catch (error) {
     console.error("Error obteniendo alertas:", error);
     return res.status(500).json({ error: "Error al obtener alertas" });
@@ -59,6 +60,56 @@ alertasRouter.post("/", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error creando alerta:", error);
     return res.status(500).json({ error: "Error al crear alerta" });
+  }
+});
+
+// Reactivar una alerta
+alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const supabase = getSupabaseClient();
+    const { data: alerta, error } = await supabase
+      .from("alertas")
+      .update({ 
+        estado: 'pendiente',
+        activado_en: null,
+        precio_actual: null
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json(alerta);
+  } catch (error) {
+    console.error("Error reactivando alerta:", error);
+    return res.status(500).json({ error: "Error al reactivar alerta" });
+  }
+});
+
+// Eliminar una alerta
+alertasRouter.delete("/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from("alertas")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      throw error;
+    }
+
+    return res.status(200).json({ message: "Alerta eliminada correctamente" });
+  } catch (error) {
+    console.error("Error eliminando alerta:", error);
+    return res.status(500).json({ error: "Error al eliminar alerta" });
   }
 });
 
