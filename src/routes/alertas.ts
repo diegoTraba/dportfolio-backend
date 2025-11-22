@@ -59,9 +59,9 @@ alertasRouter.get("/detalle/:id", async (req: Request, res: Response) => {
 // Crear nueva alerta
 alertasRouter.post("/", async (req: Request, res: Response) => {
   try {
-    const { userId, criptomoneda, condicion, precioObjetivo } = req.body;
+    const { userId, criptomoneda, condicion, precio_objetivo, precio_actual, creado } = req.body;
 
-    if (!userId || !criptomoneda || !condicion || !precioObjetivo) {
+    if (!userId || !criptomoneda || !condicion || !precio_objetivo || !precio_actual || !creado) {
       return res.status(400).json({ error: "Faltan campos requeridos" });
     }
 
@@ -73,7 +73,8 @@ alertasRouter.post("/", async (req: Request, res: Response) => {
           user_id: userId,
           criptomoneda,
           condicion,
-          precio_objetivo: precioObjetivo,
+          precio_objetivo: precio_objetivo,
+          precio_actual: precio_actual,
           estado: 'pendiente'
         }
       ])
@@ -122,7 +123,7 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
 alertasRouter.put("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { criptomoneda, condicion, precio_objetivo } = req.body;
+    const { criptomoneda, condicion, precio_objetivo, precio_actual } = req.body;
 
     if (!criptomoneda || !condicion || !precio_objetivo) {
       return res.status(400).json({ error: "Faltan campos requeridos" });
@@ -135,6 +136,7 @@ alertasRouter.put("/:id", async (req: Request, res: Response) => {
         criptomoneda,
         condicion,
         precio_objetivo,
+        precio_actual,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
