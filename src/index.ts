@@ -13,6 +13,7 @@ import { decrypt } from "./lib/encriptacion";
 
 // Rutas
 import binanceRoutes from './routes/binance';
+import alertasRoutes from "./routes/alertas";
 import { monitorService } from './services/servicioMonitoreo';
 
 // Configuración de variables de entorno
@@ -43,6 +44,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // Registrar rutas de Binance
 app.use('/api/binance', binanceRoutes);
+app.use('/api/alertas', alertasRoutes);
 
 // =============================================================================
 // MIDDLEWARE DE LOGGING (solo en desarrollo)
