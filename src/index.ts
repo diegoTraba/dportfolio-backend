@@ -16,6 +16,7 @@ import binanceRoutes from './routes/binance';
 import alertasRoutes from "./routes/alertas";
 import notificacionesRoutes from "./routes/notificaciones"
 import authRoutes from './routes/auth.js';
+import debugRoutes from './routes/debug-env'
 import { monitorService } from './services/servicioMonitoreo';
 import { createServer } from 'http'; // Ya está importado
 import { webSocketService } from './services/servicioWebSocket';
@@ -50,6 +51,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // Registrar rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/debug-env', debugRoutes);
 app.use('/api/binance', binanceRoutes);
 app.use('/api/alertas', alertasRoutes);
 app.use('/api/notificaciones', authenticateToken, notificacionesRoutes);
