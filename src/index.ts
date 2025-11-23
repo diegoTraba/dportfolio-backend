@@ -40,7 +40,10 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // CORS configurado para producción/desarrollo
 app.use(cors({
-  origin: "*",
+  origin: [
+    'https://dportfolio-pi.vercel.app/', // tu dominio de producción
+    'http://localhost:3000', // desarrollo local
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept']
