@@ -1,6 +1,7 @@
 // servicioWebSocket.ts
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
+import jwt from 'jsonwebtoken';
 
 export class WebSocketService {
   private static instance: WebSocketService;
@@ -30,7 +31,11 @@ export class WebSocketService {
       return;
     }
 
-    this.wss = new WebSocketServer({ server });
+    // this.wss = new WebSocketServer({ server });
+    this.wss = new WebSocketServer({ 
+      server,
+      path: '/api/ws'
+    });
     this.setupWebSocket();
     console.log('🚀 WebSocket Server inicializado');
   }
@@ -41,13 +46,51 @@ export class WebSocketService {
     this.wss.on('connection', (ws: WebSocket) => {
       console.log('🔗 Nuevo cliente WebSocket conectado');
 
+      // Configurar timeout para autenticación
+      const authTimeout = setTimeout(() => {
+        console.log('⏰ Timeout de autenticación WebSocket');
+        ws.close(1008, 'Timeout de autenticación');
+      }, 10000); // 10 segundos para autenticarse
+
+      let pingInterval: NodeJS.Timeout | null = null;
+
       ws.on('message', (message: Buffer) => {
         try {
           const data = JSON.parse(message.toString());
           
-          if (data.tipo === 'autenticar' && data.usuarioId) {
-            this.clients.set(data.usuarioId, ws);
-            console.log(`✅ Cliente autenticado: ${data.usuarioId}`);
+          if (data.tipo === 'autenticar' && data.usuarioId && data.token) {
+            try {
+              const decoded = jwt.verify(data.token, process.env.JWT_SECRET_KEY) as { id: string };
+              
+              if (decoded.id === data.usuarioId) {
+                // Autenticación exitosa
+                clearTimeout(authTimeout);
+                this.clients.set(data.usuarioId, ws);
+                console.log(`✅ Cliente autenticado: ${data.usuarioId}`);
+                
+                // Iniciar ping después de autenticación
+                pingInterval = setInterval(() => {
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ tipo: 'ping', timestamp: Date.now() }));
+                  }
+                }, 30000);
+                
+                // Confirmar autenticación
+                ws.send(JSON.stringify({
+                  tipo: 'autenticacion_exitosa',
+                  mensaje: 'WebSocket autenticado correctamente'
+                }));
+              } else {
+                throw new Error('ID de usuario no coincide con token');
+              }
+            } catch (error) {
+              console.error('❌ Error de autenticación WebSocket:', error);
+              ws.send(JSON.stringify({
+                tipo: 'error_autenticacion',
+                mensaje: 'Token inválido'
+              }));
+              ws.close(1008, 'Error de autenticación');
+            }
           }
           
           if (data.tipo === 'pong') {
@@ -58,8 +101,16 @@ export class WebSocketService {
         }
       });
 
-      ws.on('close', () => {
-        // Remover cliente desconectado
+      ws.on('close', (code,reason) => {
+        console.log(`🔌 WebSocket cerrado: ${code} - ${reason}`);
+        
+        // Limpiar intervalos y timeouts
+        clearTimeout(authTimeout);
+        if (pingInterval) {
+          clearInterval(pingInterval);
+        }
+        
+        // Remover cliente
         for (const [userId, client] of this.clients.entries()) {
           if (client === ws) {
             this.clients.delete(userId);
@@ -69,14 +120,21 @@ export class WebSocketService {
         }
       });
 
-      // Enviar ping cada 30 segundos para mantener conexión activa
-      const pingInterval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ tipo: 'ping' }));
-        } else {
+      ws.on('error', (error) => {
+        console.error('💥 Error WebSocket:', error);
+        
+        // Limpiar intervalos y timeouts
+        clearTimeout(authTimeout);
+        if (pingInterval) {
           clearInterval(pingInterval);
         }
-      }, 30000);
+      });
+
+      // Enviar mensaje de bienvenida
+      ws.send(JSON.stringify({
+        tipo: 'conexion_establecida',
+        mensaje: 'Conectado al servidor WebSocket. Por favor autentícate.'
+      }));
     });
   }
 

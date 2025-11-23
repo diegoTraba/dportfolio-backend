@@ -7,9 +7,9 @@ router.get('/env-details', (req, res) => {
   const envDetails = {
     // Variables específicas de JWT
     JWT_SECRET: {
-      defined: !!process.env.JWT_SECRET,
-      length: process.env.JWT_SECRET ? process.env.JWT_SECRET.length : 0,
-      value: process.env.JWT_SECRET ? '***HIDDEN***' : undefined
+      defined: !!process.env.JWT_SECRET_KEY,
+      length: process.env.JWT_SECRET_KEY ? process.env.JWT_SECRET_KEY.length : 0,
+      value: process.env.JWT_SECRET_KEY ? '***HIDDEN***' : undefined
     },
     
     // Otras variables que deberían estar definidas
