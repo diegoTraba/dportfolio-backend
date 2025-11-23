@@ -44,7 +44,7 @@ app.use(cors({
     'https://dportfolio-pi.vercel.app/', // tu dominio de producción
     'http://localhost:3000', // desarrollo local
   ],
-  credentials: true,
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept']
 }));
