@@ -167,7 +167,7 @@ server.listen(port, () => {
   console.log(`📊 WebSocket Service: ${webSocketService ? 'ACTIVO' : 'INACTIVO'}`);
 });
 
-console.log("jwt token: "+process.env.JWT_SECRET);
+console.log("jwt token: "+process.env.JWT_SECRET_KEY);
 
 // Iniciar el monitoreo de precios cuando el servidor arranque
 monitorService.startPriceMonitoring((prices) => {
