@@ -14,7 +14,12 @@ import { decrypt } from "./lib/encriptacion";
 // Rutas
 import binanceRoutes from './routes/binance';
 import alertasRoutes from "./routes/alertas";
+import notificacionesRoutes from "./routes/notificaciones"
+import authRoutes from './routes/auth.js';
 import { monitorService } from './services/servicioMonitoreo';
+import { createServer } from 'http'; // Ya está importado
+import { webSocketService } from './services/servicioWebSocket';
+import { authenticateToken } from './services/middleware/auth';
 
 // Configuración de variables de entorno
 dotenv.config();
@@ -24,6 +29,7 @@ dotenv.config();
 // =============================================================================
 
 const app = express();
+
 const port = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -42,9 +48,11 @@ app.use(cors({
 // Parseo de JSON con límite de tamaño
 app.use(express.json({ limit: '10mb' }));
 
-// Registrar rutas de Binance
+// Registrar rutas
+app.use('/api/auth', authRoutes);
 app.use('/api/binance', binanceRoutes);
 app.use('/api/alertas', alertasRoutes);
+app.use('/api/notificaciones', authenticateToken, notificacionesRoutes);
 
 // =============================================================================
 // MIDDLEWARE DE LOGGING (solo en desarrollo)
@@ -133,7 +141,14 @@ app.use("*", (req, res) => {
 // INICIALIZACIÓN DEL SERVIDOR
 // =============================================================================
 
-const server = app.listen(port, () => {
+// Crear servidor HTTP explícitamente (en lugar de usar app.listen)
+const server = createServer(app);
+
+// Inicializar WebSocketService con el servidor HTTP
+webSocketService.initialize(server);
+
+// Ahora iniciamos el servidor con server.listen en lugar de app.listen
+server.listen(port, () => {
   const address = server.address();
   const host = isProduction ? '0.0.0.0' : 'localhost';
   
@@ -143,7 +158,11 @@ const server = app.listen(port, () => {
 🌐 Host: ${host}
 📡 Puerto: ${port}
 ⏰ Iniciado: ${new Date().toISOString()}
+🔗 WebSocket Service: INICIALIZADO
   `);
+
+  // Verificar el estado del WebSocketService
+  console.log(`📊 WebSocket Service: ${webSocketService ? 'ACTIVO' : 'INACTIVO'}`);
 });
 
 // Iniciar el monitoreo de precios cuando el servidor arranque
@@ -153,8 +172,13 @@ monitorService.startPriceMonitoring((prices) => {
 
 process.on('SIGINT', () => {
   console.log('Recibida señal SIGINT, cerrando servidor...');
+  
+  // Detener el monitoreo antes de cerrar
+  monitorService.stopPriceMonitoring();
+  console.log('⏹️ Monitoreo de precios detenido');
+  
   server.close(() => {
-    console.log('Servidor cerrado correctamente');
+    console.log('🛑 Servidor cerrado correctamente');
     process.exit(0);
   });
 });

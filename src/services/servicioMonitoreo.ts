@@ -1,5 +1,6 @@
 import { binanceService } from "./servicioBinance.js";
 import { getSupabaseClient } from "../lib/supabase.js";
+import {webSocketService} from "./servicioWebSocket.js";
 
 export interface PriceData {
   symbol: string;
@@ -18,7 +19,7 @@ export class MonitorService {
       return {
         symbol: symbol.toUpperCase(),
         price,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
       console.error(`Error obteniendo precio para ${symbol}:`, error);
@@ -27,7 +28,9 @@ export class MonitorService {
   }
 
   // Obtener precios de múltiples símbolos
-  async getMultiplePrices(symbols: string[]): Promise<{ [key: string]: PriceData }> {
+  async getMultiplePrices(
+    symbols: string[]
+  ): Promise<{ [key: string]: PriceData }> {
     const prices: { [key: string]: PriceData } = {};
 
     for (const symbol of symbols) {
@@ -40,7 +43,7 @@ export class MonitorService {
         prices[symbol] = {
           symbol,
           price: 0,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
       }
     }
@@ -49,37 +52,40 @@ export class MonitorService {
   }
 
   // Iniciar monitoreo periódico (cada segundo)
-  startPriceMonitoring(callback: (prices: { [key: string]: PriceData }) => void, intervalMs: number = 60000) {
+  startPriceMonitoring(
+    callback: (prices: { [key: string]: PriceData }) => void,
+    intervalMs: number = 60000
+  ) {
     if (this.isMonitoring) {
-      console.log('⚠️ El monitoreo ya está activo');
+      console.log("⚠️ El monitoreo ya está activo");
       return;
     }
-  
+
     this.isMonitoring = true;
     console.log(`🚀 Iniciando monitoreo de precios cada ${intervalMs}ms`);
-  
+
     this.intervalId = setInterval(async () => {
       try {
-        console.log('\n=== 🔄 CICLO DE MONITOREO ===');
-        console.log('⏰', new Date().toISOString());
-        
+        console.log("\n=== 🔄 CICLO DE MONITOREO ===");
+        console.log("⏰", new Date().toISOString());
+
         // Símbolos a monitorear (puedes hacer esto dinámico basado en las alertas de la BD)
-        const symbolsToMonitor = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT'];
-        console.log('📊 Símbolos a monitorear:', symbolsToMonitor);
-        
+        const symbolsToMonitor = ["BTCUSDT", "ETHUSDT", "ADAUSDT", "SOLUSDT"];
+        console.log("📊 Símbolos a monitorear:", symbolsToMonitor);
+
         const prices = await this.getMultiplePrices(symbolsToMonitor);
-        
-        console.log('💰 Precios obtenidos:', prices);
-        
+
+        console.log("💰 Precios obtenidos:", prices);
+
         // Llamar al callback con los precios actualizados
         callback(prices);
-  
+
         // Aquí podrías añadir lógica para verificar alertas
         await this.checkAlerts(prices);
-        
-        console.log('✅ Ciclo de monitoreo completado\n');
+
+        console.log("✅ Ciclo de monitoreo completado\n");
       } catch (error) {
-        console.error('💥 Error en el monitoreo de precios:', error);
+        console.error("💥 Error en el monitoreo de precios:", error);
       }
     }, intervalMs);
   }
@@ -90,87 +96,123 @@ export class MonitorService {
       clearInterval(this.intervalId);
       this.intervalId = null;
       this.isMonitoring = false;
-      console.log('Monitoreo de precios detenido');
+      console.log("Monitoreo de precios detenido");
     }
   }
 
   // Verificar alertas (esto es donde la magia ocurre)
-private async checkAlerts(prices: { [key: string]: PriceData }) {
+  private async checkAlerts(prices: { [key: string]: PriceData }) {
     try {
-      console.log('🔍 Iniciando verificación de alertas...');
-      console.log('📊 Precios actuales:', prices);
-      
+      console.log("🔍 Iniciando verificación de alertas...");
+      console.log("📊 Precios actuales:", prices);
+
       const supabase = getSupabaseClient();
-      
+
       // Obtener todas las alertas pendientes
       const { data: alertas, error } = await supabase
-        .from('alertas')
-        .select('*')
-        .eq('estado', 'pendiente');
-  
+        .from("alertas")
+        .select("*")
+        .eq("estado", "pendiente");
+
       if (error) {
-        console.error('❌ Error obteniendo alertas:', error);
+        console.error("❌ Error obteniendo alertas:", error);
         return;
       }
-  
+
       console.log(`📋 Alertas pendientes encontradas: ${alertas?.length || 0}`);
-  
+
       if (!alertas || alertas.length === 0) {
-        console.log('ℹ️ No hay alertas pendientes para verificar');
+        console.log("ℹ️ No hay alertas pendientes para verificar");
         return;
       }
-  
+
       // Verificar cada alerta
       for (const alerta of alertas) {
         console.log(`\n🔎 Procesando alerta ID: ${alerta.id}`);
-        console.log(`   Cripto: ${alerta.criptomoneda}, Condición: ${alerta.condicion}, Objetivo: $${alerta.precio_objetivo}`);
-        
+        console.log(
+          `   Cripto: ${alerta.criptomoneda}, Condición: ${alerta.condicion}, Objetivo: $${alerta.precio_objetivo}`
+        );
+
         const symbol = `${alerta.criptomoneda}USDT`;
         const currentPrice = prices[symbol]?.price;
-  
+
         console.log(`   Símbolo buscado: ${symbol}`);
         console.log(`   Precio actual: $${currentPrice}`);
-  
+
         if (!currentPrice) {
           console.log(`   ⚠️ Precio no disponible para ${symbol}`);
           continue;
         }
-  
+
         let conditionMet = false;
-        
-        if (alerta.condicion === 'por encima de' && currentPrice >= alerta.precio_objetivo) {
+
+        if (
+          alerta.condicion === "por encima de" &&
+          currentPrice >= alerta.precio_objetivo
+        ) {
           conditionMet = true;
-          console.log(`   ✅ CONDICIÓN CUMPLIDA: ${currentPrice} >= ${alerta.precio_objetivo}`);
-        } else if (alerta.condicion === 'por debajo de' && currentPrice <= alerta.precio_objetivo) {
+          console.log(
+            `   ✅ CONDICIÓN CUMPLIDA: ${currentPrice} >= ${alerta.precio_objetivo}`
+          );
+        } else if (
+          alerta.condicion === "por debajo de" &&
+          currentPrice <= alerta.precio_objetivo
+        ) {
           conditionMet = true;
-          console.log(`   ✅ CONDICIÓN CUMPLIDA: ${currentPrice} <= ${alerta.precio_objetivo}`);
+          console.log(
+            `   ✅ CONDICIÓN CUMPLIDA: ${currentPrice} <= ${alerta.precio_objetivo}`
+          );
         } else {
-          console.log(`   ❌ Condición NO cumplida: ${currentPrice} ${alerta.condicion} ${alerta.precio_objetivo}`);
+          console.log(
+            `   ❌ Condición NO cumplida: ${currentPrice} ${alerta.condicion} ${alerta.precio_objetivo}`
+          );
         }
-  
+
         if (conditionMet) {
           console.log(`   🚀 Activando alerta ${alerta.id}...`);
-          
+
           // Actualizar alerta como activa
           const { error: updateError } = await supabase
-            .from('alertas')
-            .update({ 
-              estado: 'activo',
+            .from("alertas")
+            .update({
+              estado: "activo",
               activado: new Date().toISOString(),
-              precio_actual: currentPrice
+              precio_actual: currentPrice,
+              leido: false,
             })
-            .eq('id', alerta.id);
-  
+            .eq("id", alerta.id);
+
           if (updateError) {
-            console.error(`   💥 Error actualizando alerta ${alerta.id}:`, updateError);
+            console.error(
+              `   💥 Error actualizando alerta ${alerta.id}:`,
+              updateError
+            );
           } else {
             console.log(`   ✅ Alerta ${alerta.id} activada correctamente!`);
-            console.log(`   🎯 ${alerta.criptomoneda} alcanzó $${currentPrice} (objetivo: $${alerta.precio_objetivo})`);
+            console.log(
+              `   🎯 ${alerta.criptomoneda} alcanzó $${currentPrice} (objetivo: $${alerta.precio_objetivo})`
+            );
+          }
+
+          // Enviar notificación por WebSocket usando la instancia
+          const notificacionEnviada = webSocketService.enviarNotificacion(alerta.usuario_id, {
+            id: alerta.id,
+            criptomoneda: alerta.criptomoneda,
+            precio_objetivo: alerta.precio_objetivo,
+            precio_actual: currentPrice,
+            condicion: alerta.condicion,
+          });
+
+          if (notificacionEnviada) {
+            console.log(`   📤 Notificación enviada al usuario ${alerta.usuario_id}`);
+          } else {
+            console.log(`   ⚠️ Usuario ${alerta.usuario_id} no está conectado, notificación en cola`);
+            // Aquí podrías guardar la notificación en BD para enviarla cuando se conecte
           }
         }
       }
     } catch (error) {
-      console.error('💥 Error verificando alertas:', error);
+      console.error("💥 Error verificando alertas:", error);
     }
   }
 }
