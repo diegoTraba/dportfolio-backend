@@ -194,8 +194,9 @@ export class MonitorService {
             );
           }
 
+          console.log("user_id: " + alerta.user_id);
           // Enviar notificación por WebSocket usando la instancia
-          const notificacionEnviada = webSocketService.enviarNotificacion(alerta.usuario_id, {
+          const notificacionEnviada = webSocketService.enviarNotificacion(alerta.user_id, {
             id: alerta.id,
             criptomoneda: alerta.criptomoneda,
             precio_objetivo: alerta.precio_objetivo,
@@ -204,9 +205,9 @@ export class MonitorService {
           });
 
           if (notificacionEnviada) {
-            console.log(`   📤 Notificación enviada al usuario ${alerta.usuario_id}`);
+            console.log(`   📤 Notificación enviada al usuario ${alerta.user_id}`);
           } else {
-            console.log(`   ⚠️ Usuario ${alerta.usuario_id} no está conectado, notificación en cola`);
+            console.log(`   ⚠️ Usuario ${alerta.user_id} no está conectado, notificación en cola`);
             // Aquí podrías guardar la notificación en BD para enviarla cuando se conecte
           }
         }
