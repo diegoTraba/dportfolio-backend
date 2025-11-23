@@ -10,6 +10,9 @@ router.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
+    console.log(`🔐 Login attempt for: ${email}`);
+    console.log(`📝 Password received: ${password}`);
+
     // Validar que se proporcionen email y contraseña
     if (!email || !password) {
       return res.status(400).json({ error: 'Email y contraseña son requeridos' });
@@ -24,11 +27,18 @@ router.post('/login', async (req: Request, res: Response) => {
       .single();
 
     if (error || !user) {
+      console.log('❌ User not found:', email);
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
+    console.log(`🔍 User found: ${user.email}`);
+    console.log(`🔑 Stored password: ${user.password}`);
+    console.log(`🔎 Password starts with $2a$: ${user.password.startsWith('$2a$')}`);
+    console.log(`📏 Password length: ${user.password.length}`);
+
     // Verificar la contraseña
     const isPasswordValid = await bcrypt.compare(password, user.password);
+    console.log(`✅ Password valid: ${isPasswordValid}`);
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
