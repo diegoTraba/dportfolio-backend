@@ -13,7 +13,7 @@ router.use(authenticateToken);
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const userId = req.body;
+    const userId = req.user?.id;
     
     // Verificar que el usuario esté autenticado
     if (!userId) {

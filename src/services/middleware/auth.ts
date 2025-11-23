@@ -1,5 +1,4 @@
 // middleware/auth.ts
-// middleware/auth.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
@@ -24,9 +23,16 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as { id: string; email?: string };
-    req.user = decoded;
-    next();
+    // const decoded = jwt.verify(token, process.env.JWT_SECRET_kEY || 'fallback-secret') as { id: string; email?: string };
+    // req.user = decoded;
+    // next();
+    jwt.verify(token, process.env.JWT_SECRET_KEY, (err, user) => {
+      if (err) {
+        return res.sendStatus(403);
+      }
+      req.user = user;
+      next();
+    });
   } catch (error) {
     return res.status(403).json({ error: 'Token inválido o expirado' });
   }
