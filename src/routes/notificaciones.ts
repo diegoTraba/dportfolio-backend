@@ -25,7 +25,7 @@ router.get('/', async (req: Request, res: Response) => {
     const { data: notificaciones, error } = await supabase
       .from('alertas')
       .select('*')
-      .eq('usuario_id', userId)
+      .eq('user_id', userId)
       .eq('estado', 'activo')
       .order('activado', { ascending: false });
 
