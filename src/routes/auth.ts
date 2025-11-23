@@ -43,6 +43,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
+    console.log("jwt_secret: "+ process.env.JWT_SECRET);
     // Generar el token JWT
     const token = jwt.sign(
       { 
