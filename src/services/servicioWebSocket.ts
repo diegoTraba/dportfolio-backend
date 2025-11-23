@@ -46,13 +46,32 @@ export class WebSocketService {
     this.wss.on('connection', (ws: WebSocket) => {
       console.log('🔗 Nuevo cliente WebSocket conectado');
 
-      // Configurar timeout para autenticación
+      // Configurar timeout para autenticación (15 segundos en lugar de 10)
       const authTimeout = setTimeout(() => {
-        console.log('⏰ Timeout de autenticación WebSocket');
-        ws.close(1008, 'Timeout de autenticación');
-      }, 10000); // 10 segundos para autenticarse
+        console.log('⏰ Timeout de autenticación WebSocket - Cerrando conexión');
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1008, 'Timeout de autenticación');
+        }
+      }, 15000);
 
       let pingInterval: NodeJS.Timeout | null = null;
+      let isAuthenticated = false;
+
+      // Configurar heartbeat
+      const setupHeartbeat = () => {
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send(JSON.stringify({ 
+                tipo: 'ping', 
+                timestamp: Date.now() 
+              }));
+            } catch (error) {
+              console.error('Error enviando ping:', error);
+            }
+          }
+        }, 30000); // Cada 30 segundos
+      };
 
       ws.on('message', (message: Buffer) => {
         try {
@@ -60,20 +79,17 @@ export class WebSocketService {
           
           if (data.tipo === 'autenticar' && data.usuarioId && data.token) {
             try {
-              const decoded = jwt.verify(data.token, process.env.JWT_SECRET_KEY) as { id: string };
+              const decoded = jwt.verify(data.token, process.env.JWT_SECRET_KEY!) as { id: string };
               
               if (decoded.id === data.usuarioId) {
                 // Autenticación exitosa
                 clearTimeout(authTimeout);
+                isAuthenticated = true;
                 this.clients.set(data.usuarioId, ws);
                 console.log(`✅ Cliente autenticado: ${data.usuarioId}`);
                 
-                // Iniciar ping después de autenticación
-                pingInterval = setInterval(() => {
-                  if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ tipo: 'ping', timestamp: Date.now() }));
-                  }
-                }, 30000);
+                // Iniciar heartbeat después de autenticación
+                setupHeartbeat();
                 
                 // Confirmar autenticación
                 ws.send(JSON.stringify({
@@ -87,21 +103,21 @@ export class WebSocketService {
               console.error('❌ Error de autenticación WebSocket:', error);
               ws.send(JSON.stringify({
                 tipo: 'error_autenticacion',
-                mensaje: 'Token inválido'
+                mensaje: 'Token inválido o expirado'
               }));
               ws.close(1008, 'Error de autenticación');
             }
           }
           
           if (data.tipo === 'pong') {
-            console.log('🏓 Pong recibido');
+            console.log('🏓 Pong recibido de cliente autenticado');
           }
         } catch (error) {
           console.error('Error procesando mensaje WebSocket:', error);
         }
       });
 
-      ws.on('close', (code,reason) => {
+      ws.on('close', (code, reason) => {
         console.log(`🔌 WebSocket cerrado: ${code} - ${reason}`);
         
         // Limpiar intervalos y timeouts
@@ -110,12 +126,14 @@ export class WebSocketService {
           clearInterval(pingInterval);
         }
         
-        // Remover cliente
-        for (const [userId, client] of this.clients.entries()) {
-          if (client === ws) {
-            this.clients.delete(userId);
-            console.log(`❌ Cliente desconectado: ${userId}`);
-            break;
+        // Remover cliente solo si estaba autenticado
+        if (isAuthenticated) {
+          for (const [userId, client] of this.clients.entries()) {
+            if (client === ws) {
+              this.clients.delete(userId);
+              console.log(`❌ Cliente desconectado: ${userId}`);
+              break;
+            }
           }
         }
       });
@@ -131,10 +149,12 @@ export class WebSocketService {
       });
 
       // Enviar mensaje de bienvenida
-      ws.send(JSON.stringify({
-        tipo: 'conexion_establecida',
-        mensaje: 'Conectado al servidor WebSocket. Por favor autentícate.'
-      }));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          tipo: 'conexion_establecida',
+          mensaje: 'Conectado al servidor WebSocket. Por favor autentícate.'
+        }));
+      }
     });
   }
 
