@@ -91,14 +91,14 @@ export interface TradeHistoryParams {
 
 // Lista fija de símbolos a consultar
 export const SUPPORTED_SYMBOLS = [
-  "BTCUSDT",
-  "ETHUSDT",
-  "SOLUSDT",
-  "ADAUSDT",
-  "XRPUSDT",
-  "BNBUSDT",
-  "AVAXUSDT",
-  "LINKUSDT",
+  "BTCUSDC",
+  "ETHUSDC",
+  "SOLUSDC",
+  "ADAUSDC",
+  "XRPUSDC",
+  "BNBUSDC",
+  "AVAXUSDC",
+  "LINKUSDC",
 ];
 
 // =============================================================================
