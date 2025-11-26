@@ -65,6 +65,30 @@ interface BinanceAccountResponse {
   // otras propiedades que pueda tener la respuesta...
 }
 
+// Añade estas interfaces en servicioBinance.ts
+export interface BinanceTrade {
+  id: number;
+  orderId: number;
+  symbol: string;
+  price: string;
+  qty: string;
+  quoteQty: string;
+  commission: string;
+  commissionAsset: string;
+  time: number;
+  isBuyer: boolean;
+  isMaker: boolean;
+  isBestMatch: boolean;
+}
+
+export interface TradeHistoryParams {
+  symbol?: string;
+  startTime?: number;
+  endTime?: number;
+  fromId?: number;
+  limit?: number;
+}
+
 // =============================================================================
 // CLASE PRINCIPAL DEL SERVICIO
 // =============================================================================
@@ -272,6 +296,84 @@ class BinanceService {
       return 0;
     }
   }
+
+  /**
+ * Obtener el historial de trades (compras/ventas) de un usuario
+ */
+async getUserTrades(
+  credentials: BinanceCredentials,
+  params: TradeHistoryParams = {}
+): Promise<BinanceTrade[]> {
+  try {
+    console.log("=== 📋 OBTENIENDO HISTORIAL DE TRADES ===");
+    console.log("📊 Parámetros:", params);
+
+    const queryParams: Record<string, string> = {};
+
+    if (params.symbol) {
+      queryParams.symbol = params.symbol;
+    }
+    if (params.startTime) {
+      queryParams.startTime = params.startTime.toString();
+    }
+    if (params.endTime) {
+      queryParams.endTime = params.endTime.toString();
+    }
+    if (params.fromId) {
+      queryParams.fromId = params.fromId.toString();
+    }
+    if (params.limit) {
+      queryParams.limit = params.limit.toString();
+    }
+
+    const response = await this.makeAuthenticatedRequest(
+      "/api/v3/myTrades",
+      credentials,
+      queryParams
+    );
+
+    if (!response.ok) {
+      throw new Error(`Error obteniendo trades: ${response.statusText}`);
+    }
+
+    const trades = await response.json() as BinanceTrade[];
+    
+    console.log(`✅ Obtenidos ${trades.length} trades`);
+    
+    // Filtrar solo compras (isBuyer = true)
+    const buyTrades = trades.filter(trade => trade.isBuyer === true);
+    console.log(`🛒 Compras encontradas: ${buyTrades.length}`);
+    
+    return buyTrades;
+  } catch (error) {
+    console.error("❌ Error obteniendo historial de trades:", error);
+    throw error;
+  }
+}
+
+/**
+ * Obtener todos los símbolos en los que el usuario ha tenido actividad
+ */
+async getUserTradeSymbols(
+  credentials: BinanceCredentials
+): Promise<string[]> {
+  try {
+    console.log("=== 🔍 OBTENIENDO SÍMBOLOS CON ACTIVIDAD ===");
+    
+    // Primero obtenemos algunos trades recientes para identificar símbolos
+    const recentTrades = await this.getUserTrades(credentials, { limit: 1000 });
+    
+    const symbols = [...new Set(recentTrades.map(trade => trade.symbol))];
+    
+    console.log(`✅ Símbolos encontrados: ${symbols.length}`);
+    console.log("📊 Símbolos:", symbols);
+    
+    return symbols;
+  } catch (error) {
+    console.error("❌ Error obteniendo símbolos:", error);
+    return [];
+  }
+}
 
   // ===========================================================================
   // MÉTODOS AUXILIARES

@@ -4,6 +4,7 @@ import { encrypt, decrypt } from "../lib/encriptacion.js";
 import {
   binanceService,
   BinanceCredentials,
+  TradeHistoryParams,
 } from "../services/servicioBinance.js";
 
 const binanceRouter = express.Router();
@@ -154,6 +155,165 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
       totalUSD: 0,
       connected: false,
       exchangesCount: 0,
+    });
+  }
+});
+
+// Obtener historial de compras del usuario
+binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { 
+      symbol, 
+      startTime, 
+      endTime, 
+      limit = "100" 
+    } = req.query;
+
+    console.log("=== 🛒 OBTENIENDO COMPRAS DEL USUARIO ===");
+    console.log("📋 Parámetros recibidos:", {
+      userId,
+      symbol,
+      startTime,
+      endTime,
+      limit
+    });
+
+    // Validación básica del parámetro
+    if (!userId || userId.trim().length === 0) {
+      return res.status(400).json({ error: "El userId es requerido" });
+    }
+
+    // Obtener credenciales de Binance del usuario
+    const supabase = getSupabaseClient();
+    const { data: exchange, error } = await supabase
+      .from("exchanges")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("exchange", "BINANCE")
+      .eq("is_active", true)
+      .single();
+
+    if (error || !exchange) {
+      console.error("❌ Error obteniendo exchange:", error);
+      return res.status(404).json({ 
+        error: "No se encontró conexión activa de Binance para este usuario" 
+      });
+    }
+
+    // Desencriptar credenciales
+    const decryptedApiKey = decrypt(exchange.api_key);
+    const decryptedApiSecret = decrypt(exchange.api_secret);
+
+    const credentials: BinanceCredentials = {
+      apiKey: decryptedApiKey,
+      apiSecret: decryptedApiSecret,
+    };
+
+    // Preparar parámetros para la consulta
+    const tradeParams: TradeHistoryParams = {
+      limit: parseInt(limit as string)
+    };
+
+    if (symbol) {
+      tradeParams.symbol = symbol as string;
+    }
+
+    if (startTime) {
+      tradeParams.startTime = parseInt(startTime as string);
+    }
+
+    if (endTime) {
+      tradeParams.endTime = parseInt(endTime as string);
+    }
+
+    // Obtener las compras del usuario
+    const buyTrades = await binanceService.getUserTrades(credentials, tradeParams);
+
+    // Formatear la respuesta
+    const formattedTrades = buyTrades.map(trade => ({
+      id: trade.id,
+      orderId: trade.orderId,
+      symbol: trade.symbol,
+      price: parseFloat(trade.price),
+      quantity: parseFloat(trade.qty),
+      total: parseFloat(trade.quoteQty),
+      commission: parseFloat(trade.commission),
+      commissionAsset: trade.commissionAsset,
+      timestamp: trade.time,
+      date: new Date(trade.time).toISOString(),
+      isBuyer: trade.isBuyer,
+      isMaker: trade.isMaker
+    }));
+
+    console.log(`✅ ${formattedTrades.length} compras obtenidas exitosamente`);
+
+    return res.json({
+      success: true,
+      trades: formattedTrades,
+      total: formattedTrades.length,
+      query: {
+        symbol: symbol || 'all',
+        startTime: startTime ? new Date(parseInt(startTime as string)).toISOString() : null,
+        endTime: endTime ? new Date(parseInt(endTime as string)).toISOString() : null,
+        limit: parseInt(limit as string)
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error obteniendo compras del usuario:", error);
+    return res.status(500).json({ 
+      error: "Error al obtener el historial de compras",
+      details: error instanceof Error ? error.message : "Error desconocido"
+    });
+  }
+});
+
+// Obtener símbolos con actividad del usuario
+binanceRouter.get("/trade-symbols/:userId", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId || userId.trim().length === 0) {
+      return res.status(400).json({ error: "El userId es requerido" });
+    }
+
+    // Obtener credenciales (misma lógica que el endpoint anterior)
+    const supabase = getSupabaseClient();
+    const { data: exchange, error } = await supabase
+      .from("exchanges")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("exchange", "BINANCE")
+      .eq("is_active", true)
+      .single();
+
+    if (error || !exchange) {
+      return res.status(404).json({ 
+        error: "No se encontró conexión activa de Binance para este usuario" 
+      });
+    }
+
+    const decryptedApiKey = decrypt(exchange.api_key);
+    const decryptedApiSecret = decrypt(exchange.api_secret);
+
+    const credentials: BinanceCredentials = {
+      apiKey: decryptedApiKey,
+      apiSecret: decryptedApiSecret,
+    };
+
+    const symbols = await binanceService.getUserTradeSymbols(credentials);
+
+    return res.json({
+      success: true,
+      symbols,
+      total: symbols.length
+    });
+
+  } catch (error) {
+    console.error("❌ Error obteniendo símbolos:", error);
+    return res.status(500).json({ 
+      error: "Error al obtener los símbolos con actividad"
     });
   }
 });
