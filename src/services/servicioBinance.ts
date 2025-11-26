@@ -89,6 +89,18 @@ export interface TradeHistoryParams {
   limit?: number;
 }
 
+// Lista fija de símbolos a consultar
+export const SUPPORTED_SYMBOLS = [
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "ADAUSDT",
+  "XRPUSDT",
+  "BNBUSDT",
+  "AVAXUSDT",
+  "LINKUSDT",
+];
+
 // =============================================================================
 // CLASE PRINCIPAL DEL SERVICIO
 // =============================================================================
@@ -215,7 +227,7 @@ class BinanceService {
       );
 
       if (accountResponse.ok) {
-        const accountData = await accountResponse.json() as SimpleEarnAccount; // ✅ Type assertion
+        const accountData = (await accountResponse.json()) as SimpleEarnAccount; // ✅ Type assertion
         console.log("✅ Datos de Simple Earn Account recibidos");
 
         if (accountData.totalAmountInBTC) {
@@ -269,7 +281,8 @@ class BinanceService {
 
       // Procesar posiciones flexibles
       if (flexibleResponse.ok) {
-        const data = await flexibleResponse.json() as SimpleEarnFlexibleResponse; // ✅ Type assertion
+        const data =
+          (await flexibleResponse.json()) as SimpleEarnFlexibleResponse; // ✅ Type assertion
         totalEarn += this.calculateEarnFromPositions(
           data,
           "flexible",
@@ -279,7 +292,7 @@ class BinanceService {
 
       // Procesar posiciones locked
       if (lockedResponse.ok) {
-        const data = await lockedResponse.json() as SimpleEarnLockedResponse; // ✅ Type assertion
+        const data = (await lockedResponse.json()) as SimpleEarnLockedResponse; // ✅ Type assertion
         totalEarn += this.calculateEarnFromPositions(
           data,
           "locked",
@@ -298,82 +311,134 @@ class BinanceService {
   }
 
   /**
- * Obtener el historial de trades (compras/ventas) de un usuario
- */
-async getUserTrades(
-  credentials: BinanceCredentials,
-  params: TradeHistoryParams = {}
-): Promise<BinanceTrade[]> {
-  try {
-    console.log("=== 📋 OBTENIENDO HISTORIAL DE TRADES ===");
-    console.log("📊 Parámetros:", params);
+   * Obtener el historial de trades (compras/ventas) de un usuario para un símbolo específico
+   */
+  async getUserTrades(
+    credentials: BinanceCredentials,
+    params: TradeHistoryParams
+  ): Promise<BinanceTrade[]> {
+    try {
+      console.log("=== 📋 OBTENIENDO TRADES PARA SÍMBOLO ===");
+      console.log("📊 Parámetros:", params);
 
-    const queryParams: Record<string, string> = {};
+      if (!params.symbol) {
+        throw new Error("El parámetro 'symbol' es obligatorio");
+      }
 
-    if (params.symbol) {
-      queryParams.symbol = params.symbol;
-    }
-    if (params.startTime) {
-      queryParams.startTime = params.startTime.toString();
-    }
-    if (params.endTime) {
-      queryParams.endTime = params.endTime.toString();
-    }
-    if (params.fromId) {
-      queryParams.fromId = params.fromId.toString();
-    }
-    if (params.limit) {
-      queryParams.limit = params.limit.toString();
-    }
+      const response = await this.makeAuthenticatedRequest(
+        "/api/v3/myTrades",
+        credentials,
+        params as Record<string, string>
+      );
 
-    const response = await this.makeAuthenticatedRequest(
-      "/api/v3/myTrades",
-      credentials,
-      queryParams
-    );
+      if (!response.ok) {
+        throw new Error(`Error obteniendo trades: ${response.statusText}`);
+      }
 
-    if (!response.ok) {
-      throw new Error(`Error obteniendo trades: ${response.statusText}`);
+      const trades = (await response.json()) as BinanceTrade[];
+
+      console.log(`✅ Obtenidos ${trades.length} trades para ${params.symbol}`);
+
+      // Filtrar solo compras (isBuyer = true)
+      const buyTrades = trades.filter((trade) => trade.isBuyer === true);
+      console.log(`🛒 Compras encontradas: ${buyTrades.length}`);
+
+      return buyTrades;
+    } catch (error) {
+      console.error("❌ Error obteniendo historial de trades:", error);
+      throw error;
     }
-
-    const trades = await response.json() as BinanceTrade[];
-    
-    console.log(`✅ Obtenidos ${trades.length} trades`);
-    
-    // Filtrar solo compras (isBuyer = true)
-    const buyTrades = trades.filter(trade => trade.isBuyer === true);
-    console.log(`🛒 Compras encontradas: ${buyTrades.length}`);
-    
-    return buyTrades;
-  } catch (error) {
-    console.error("❌ Error obteniendo historial de trades:", error);
-    throw error;
   }
-}
 
-/**
- * Obtener todos los símbolos en los que el usuario ha tenido actividad
- */
-async getUserTradeSymbols(
-  credentials: BinanceCredentials
-): Promise<string[]> {
-  try {
-    console.log("=== 🔍 OBTENIENDO SÍMBOLOS CON ACTIVIDAD ===");
-    
-    // Primero obtenemos algunos trades recientes para identificar símbolos
-    const recentTrades = await this.getUserTrades(credentials, { limit: 1000 });
-    
-    const symbols = [...new Set(recentTrades.map(trade => trade.symbol))];
-    
-    console.log(`✅ Símbolos encontrados: ${symbols.length}`);
-    console.log("📊 Símbolos:", symbols);
-    
-    return symbols;
-  } catch (error) {
-    console.error("❌ Error obteniendo símbolos:", error);
-    return [];
+  /**
+   * Obtener todos los trades del usuario iterando por la lista fija de símbolos
+   */
+  async getAllUserTrades(
+    credentials: BinanceCredentials,
+    params: Omit<TradeHistoryParams, "symbol"> = {}
+  ): Promise<BinanceTrade[]> {
+    try {
+      console.log("=== 🔄 OBTENIENDO TODOS LOS TRADES DEL USUARIO ===");
+      console.log("📊 Usando lista fija de símbolos:", SUPPORTED_SYMBOLS);
+
+      let allTrades: BinanceTrade[] = [];
+
+      console.log(
+        `📊 Obteniendo trades para ${SUPPORTED_SYMBOLS.length} símbolos...`
+      );
+
+      // Usamos Promise.all con limitación de concurrencia para mejor performance
+      const batchSize = 2; // Número de requests concurrentes
+      for (let i = 0; i < SUPPORTED_SYMBOLS.length; i += batchSize) {
+        const batch = SUPPORTED_SYMBOLS.slice(i, i + batchSize);
+
+        const batchPromises = batch.map(async (symbol) => {
+          try {
+            console.log(`🔍 Buscando trades para ${symbol}...`);
+
+            const symbolTrades = await this.getUserTrades(credentials, {
+              ...params,
+              symbol: symbol,
+            });
+
+            console.log(
+              `✅ ${symbol}: ${symbolTrades.length} trades encontrados`
+            );
+            return symbolTrades;
+          } catch (error) {
+            console.error(`❌ Error obteniendo trades para ${symbol}:`, error);
+            return []; // Retornar array vacío en caso de error
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        batchResults.forEach((trades) => {
+          allTrades = [...allTrades, ...trades];
+        });
+
+        // Pequeño delay entre batches para evitar rate limiting
+        if (i + batchSize < SUPPORTED_SYMBOLS.length) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+      }
+
+      // Ordenamos por timestamp (más reciente primero)
+      allTrades.sort((a, b) => b.time - a.time);
+
+      // Aplicamos límite global si se especifica
+      if (params.limit && allTrades.length > params.limit) {
+        allTrades = allTrades.slice(0, params.limit);
+      }
+
+      console.log(
+        `✅ Obtenidos ${allTrades.length} trades de ${SUPPORTED_SYMBOLS.length} símbolos`
+      );
+
+      return allTrades;
+    } catch (error) {
+      console.error("❌ Error obteniendo todos los trades:", error);
+      throw error;
+    }
   }
-}
+
+  /**
+   * Obtener todos los símbolos en los que el usuario ha tenido actividad
+   */
+  async getUserTradeSymbols(
+    credentials: BinanceCredentials
+  ): Promise<string[]> {
+    try {
+      console.log("=== 🔍 OBTENIENDO SÍMBOLOS SOPORTADOS ===");
+
+      // Devolvemos directamente la lista fija
+      console.log(`✅ Símbolos soportados: ${SUPPORTED_SYMBOLS.length}`);
+
+      return SUPPORTED_SYMBOLS;
+    } catch (error) {
+      console.error("❌ Error obteniendo símbolos:", error);
+      return SUPPORTED_SYMBOLS; // Fallback a la lista fija
+    }
+  }
 
   // ===========================================================================
   // MÉTODOS AUXILIARES
@@ -391,7 +456,7 @@ async getUserTradeSymbols(
       throw new Error(`❌ Error de API Binance: ${response.statusText}`);
     }
 
-    const data = await response.json() as BinanceAccountResponse; // ✅ Type assertion
+    const data = (await response.json()) as BinanceAccountResponse; // ✅ Type assertion
     return data.balances.filter(
       (balance: BinanceBalance) =>
         parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
@@ -403,7 +468,7 @@ async getUserTradeSymbols(
       const response = await fetch(`${this.baseUrl}/api/v3/ticker/price`);
       if (!response.ok) throw new Error("Failed to fetch prices");
 
-      const prices = await response.json() as TickerPrice[]; // ✅ Type assertion
+      const prices = (await response.json()) as TickerPrice[]; // ✅ Type assertion
 
       const usdtPrices: { [asset: string]: number } = {};
 
@@ -431,7 +496,7 @@ async getUserTradeSymbols(
       );
       if (!response.ok) throw new Error("Failed to fetch BTC price");
 
-      const data = await response.json() as TickerPrice; // ✅ Type assertion
+      const data = (await response.json()) as TickerPrice; // ✅ Type assertion
       return parseFloat(data.price);
     } catch (error) {
       console.error("❌ Error obteniendo precio BTC:", error);
@@ -446,7 +511,7 @@ async getUserTradeSymbols(
       );
       if (!response.ok) throw new Error("Failed to fetch ETH price");
 
-      const data = await response.json() as TickerPrice; // ✅ Type assertion
+      const data = (await response.json()) as TickerPrice; // ✅ Type assertion
       return parseFloat(data.price);
     } catch (error) {
       console.error("❌ Error obteniendo precio ETH:", error);
@@ -490,7 +555,7 @@ async getUserTradeSymbols(
     }
   }
 
-   // ===========================================================================
+  // ===========================================================================
   // MÉTODOS PARA PRECIOS Y ALERTAS
   // ===========================================================================
 
@@ -499,13 +564,15 @@ async getUserTradeSymbols(
    */
   async getPrice(symbol: string): Promise<number> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/v3/ticker/price?symbol=${symbol}`);
-      
+      const response = await fetch(
+        `${this.baseUrl}/api/v3/ticker/price?symbol=${symbol}`
+      );
+
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json() as TickerPrice;
+      const data = (await response.json()) as TickerPrice;
       return parseFloat(data.price);
     } catch (error) {
       console.error(`Error obteniendo precio para ${symbol}:`, error);
@@ -516,10 +583,12 @@ async getUserTradeSymbols(
   /**
    * Obtener múltiples precios a la vez (público)
    */
-  async getMultiplePrices(symbols: string[]): Promise<{ [key: string]: number }> {
+  async getMultiplePrices(
+    symbols: string[]
+  ): Promise<{ [key: string]: number }> {
     try {
       const prices: { [key: string]: number } = {};
-      
+
       // Usar Promise.all para obtener todos los precios en paralelo
       const pricePromises = symbols.map(async (symbol) => {
         try {
@@ -532,8 +601,8 @@ async getUserTradeSymbols(
       });
 
       const results = await Promise.all(pricePromises);
-      
-      results.forEach(result => {
+
+      results.forEach((result) => {
         prices[result.symbol] = result.price;
       });
 
@@ -550,7 +619,7 @@ async getUserTradeSymbols(
   private async makeRequest(endpoint: string): Promise<any> {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -562,7 +631,6 @@ async getUserTradeSymbols(
     }
   }
 
-
   // ===========================================================================
   // MÉTODOS DE AUTENTICACIÓN
   // ===========================================================================
@@ -573,37 +641,50 @@ async getUserTradeSymbols(
     additionalParams: Record<string, string> = {}
   ): Promise<Response> {
     try {
-      console.log('\n=== 🔐 MAKE AUTHENTICATED REQUEST ===');
+      console.log("\n=== 🔐 MAKE AUTHENTICATED REQUEST ===");
       console.log(`📋 Endpoint: ${endpoint}`);
-  
+
       // Obtener el tiempo del servidor de Binance
       const binanceTime = await this.getBinanceServerTime();
       const localTime = Date.now();
       const timeDiff = binanceTime - localTime;
-      
-      console.log(`⏰ Tiempo local: ${localTime} (${new Date(localTime).toISOString()})`);
-      console.log(`⏰ Tiempo Binance: ${binanceTime} (${new Date(binanceTime).toISOString()})`);
+
+      console.log(
+        `⏰ Tiempo local: ${localTime} (${new Date(localTime).toISOString()})`
+      );
+      console.log(
+        `⏰ Tiempo Binance: ${binanceTime} (${new Date(
+          binanceTime
+        ).toISOString()})`
+      );
       console.log(`⏰ Diferencia: ${timeDiff}ms`);
-  
+
       const timestamp = binanceTime.toString();
-  
+
       const params = new URLSearchParams({
         timestamp,
         recvWindow: "5000",
         ...additionalParams,
       });
-  
+
       const queryString = params.toString();
       console.log(`📝 Query string: ${queryString}`);
-  
-      const signature = await this.generateSignature(queryString, credentials.apiSecret);
+
+      const signature = await this.generateSignature(
+        queryString,
+        credentials.apiSecret
+      );
       console.log(`✍️ Signature: ${signature.substring(0, 30)}...`);
-  
+
       const url = `${this.baseUrl}${endpoint}?${queryString}&signature=${signature}`;
-      console.log(`🌐 URL completa: ${url.split('&signature')[0]}&signature=${signature.substring(0, 10)}...`);
-  
-      console.log('🚀 Enviando request a Binance...');
-      
+      console.log(
+        `🌐 URL completa: ${
+          url.split("&signature")[0]
+        }&signature=${signature.substring(0, 10)}...`
+      );
+
+      console.log("🚀 Enviando request a Binance...");
+
       const startTime = Date.now();
       const response = await fetch(url, {
         headers: {
@@ -612,47 +693,52 @@ async getUserTradeSymbols(
         },
       });
       const endTime = Date.now();
-      
+
       console.log(`⏱️ Tiempo de respuesta: ${endTime - startTime}ms`);
       console.log(`📊 Status: ${response.status} ${response.statusText}`);
-  
+
       const responseText = await response.text();
-      console.log(`📄 Response body: ${responseText.substring(0, 500)}${responseText.length > 500 ? '...' : ''}`);
-  
+      console.log(
+        `📄 Response body: ${responseText.substring(0, 500)}${
+          responseText.length > 500 ? "..." : ""
+        }`
+      );
+
       if (!response.ok) {
-        console.log(`❌ HTTP ${response.status}: ${response.statusText} for ${endpoint}`);
-        
+        console.log(
+          `❌ HTTP ${response.status}: ${response.statusText} for ${endpoint}`
+        );
+
         try {
           const errorData = JSON.parse(responseText);
           console.log(`❌ Binance Error Code: ${errorData.code}`);
           console.log(`❌ Binance Error Message: ${errorData.msg}`);
         } catch (e) {
-          console.log('❌ No se pudo parsear la respuesta de error de Binance');
+          console.log("❌ No se pudo parsear la respuesta de error de Binance");
         }
       } else {
-        console.log('✅ Request exitoso a Binance API');
+        console.log("✅ Request exitoso a Binance API");
       }
-  
+
       return new Response(responseText, {
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers
+        headers: response.headers,
       });
-  
     } catch (error) {
-      console.error('💥 ERROR en makeAuthenticatedRequest:', error);
+      console.error("💥 ERROR en makeAuthenticatedRequest:", error);
       throw error;
     }
   }
-  
+
   private async getBinanceServerTime(): Promise<number> {
     try {
-      const response = await fetch('https://api.binance.com/api/v3/time');
-      if (!response.ok) throw new Error('Failed to get server time');
-      const data = await response.json() as { serverTime: number }; // ✅ Type assertion
+      const response = await fetch("https://api.binance.com/api/v3/time");
+      if (!response.ok) throw new Error("Failed to get server time");
+      const data = (await response.json()) as { serverTime: number }; // ✅ Type assertion
       return data.serverTime;
     } catch (error) {
-      console.error('Error obteniendo tiempo de Binance:', error);
+      console.error("Error obteniendo tiempo de Binance:", error);
       return Date.now(); // Fallback al tiempo local
     }
   }
@@ -701,6 +787,20 @@ async getUserTradeSymbols(
       throw error;
     }
   }
+}
+
+/**
+ * Valida si un símbolo está en la lista de soportados
+ */
+export function isValidSymbol(symbol: string): boolean {
+  return SUPPORTED_SYMBOLS.includes(symbol.toUpperCase());
+}
+
+/**
+ * Obtiene la lista de símbolos soportados
+ */
+export function getSupportedSymbols(): string[] {
+  return [...SUPPORTED_SYMBOLS]; // Retorna copia para evitar mutaciones
 }
 
 export const binanceService = new BinanceService();
