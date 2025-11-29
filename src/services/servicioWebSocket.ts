@@ -9,7 +9,6 @@ export class WebSocketService {
   private clients: Map<string, WebSocket> = new Map();
 
   private constructor() {
-    // Constructor privado para evitar instanciación directa
   }
 
   /**
@@ -31,7 +30,6 @@ export class WebSocketService {
       return;
     }
 
-    // this.wss = new WebSocketServer({ server });
     this.wss = new WebSocketServer({ 
       server,
       path: '/api/ws'

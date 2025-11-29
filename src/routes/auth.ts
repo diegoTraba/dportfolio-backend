@@ -1,6 +1,7 @@
 // routes/auth.ts
+// Ruta para loguearse en la API
 import { Router, Request, Response } from 'express';
-import { getSupabaseClient } from '../lib/supabase'; // Ajusta la ruta según tu estructura
+import { getSupabaseClient } from '../lib/supabase';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
@@ -8,6 +9,7 @@ const router = Router();
 
 router.post('/login', async (req: Request, res: Response) => {
   try {
+    //obtengo el email y contraseña que se envian en el body de la peticion
     const { email, password } = req.body;
 
     console.log(`🔐 Login attempt for: ${email}`);
@@ -26,15 +28,13 @@ router.post('/login', async (req: Request, res: Response) => {
       .eq('email', email)
       .single();
 
+      // Manejo el error si no se encuentra el usuario
     if (error || !user) {
       console.log('❌ User not found:', email);
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
     console.log(`🔍 User found: ${user.email}`);
-    console.log(`🔑 Stored password: ${user.password}`);
-    console.log(`🔎 Password starts with $2a$: ${user.password.startsWith('$2a$')}`);
-    console.log(`📏 Password length: ${user.password.length}`);
 
     // Verificar la contraseña
     const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -42,8 +42,7 @@ router.post('/login', async (req: Request, res: Response) => {
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
-
-    console.log("jwt_secret: "+ process.env.JWT_SECRET_KEY);
+    
     // Generar el token JWT
     const token = jwt.sign(
       { 

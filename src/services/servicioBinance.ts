@@ -162,8 +162,8 @@ class BinanceService {
       const [balances, usdtPrices, btcPrice, ethPrice] = await Promise.all([
         this.getAccountBalance(credentials),
         this.getUSDTPrices(),
-        this.getBTCPrice(),
-        this.getETHPrice(),
+        this.getPrice("BTCUSDT"),  
+        this.getPrice("ETHUSDT"),
       ]);
 
       let spotTotal = 0;
@@ -232,7 +232,7 @@ class BinanceService {
 
         if (accountData.totalAmountInBTC) {
           const btcAmount = parseFloat(accountData.totalAmountInBTC);
-          const btcPrice = await this.getBTCPrice();
+          const btcPrice = await this.getPrice("BTCUSDT"); 
           const total = btcAmount * btcPrice;
           console.log(
             `💰 TOTAL EARN: ${btcAmount} BTC × ${btcPrice} = ${total.toFixed(
@@ -486,36 +486,6 @@ class BinanceService {
     } catch (error) {
       console.error("❌ Error obteniendo precios USDT:", error);
       return {};
-    }
-  }
-
-  private async getBTCPrice(): Promise<number> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/api/v3/ticker/price?symbol=BTCUSDT`
-      );
-      if (!response.ok) throw new Error("Failed to fetch BTC price");
-
-      const data = (await response.json()) as TickerPrice; // ✅ Type assertion
-      return parseFloat(data.price);
-    } catch (error) {
-      console.error("❌ Error obteniendo precio BTC:", error);
-      return 0;
-    }
-  }
-
-  private async getETHPrice(): Promise<number> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/api/v3/ticker/price?symbol=ETHUSDT`
-      );
-      if (!response.ok) throw new Error("Failed to fetch ETH price");
-
-      const data = (await response.json()) as TickerPrice; // ✅ Type assertion
-      return parseFloat(data.price);
-    } catch (error) {
-      console.error("❌ Error obteniendo precio ETH:", error);
-      return 0;
     }
   }
 

@@ -1,4 +1,5 @@
 // middleware/auth.ts
+//esta clase sirve para exigir la autenticacion en las rutas de los endpoints
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
@@ -23,9 +24,6 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    // const decoded = jwt.verify(token, process.env.JWT_SECRET_kEY || 'fallback-secret') as { id: string; email?: string };
-    // req.user = decoded;
-    // next();
     jwt.verify(token, process.env.JWT_SECRET_KEY, (err, user) => {
       if (err) {
         return res.sendStatus(403);

@@ -6,19 +6,15 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
-// Servicios y utilidades locales
-import { getSupabaseClient } from "./lib/supabase";
-import { binanceService, BinanceCredentials } from "./services/servicioBinance";
-import { decrypt } from "./lib/encriptacion";
-
 // Rutas
 import binanceRoutes from './routes/binance';
 import alertasRoutes from "./routes/alertas";
 import notificacionesRoutes from "./routes/notificaciones"
 import authRoutes from './routes/auth.js';
-import debugRoutes from './routes/debug-env'
+
+// Servicios
 import { monitorService } from './services/servicioMonitoreo';
-import { createServer } from 'http'; // Ya está importado
+import { createServer } from 'http';
 import { webSocketService } from './services/servicioWebSocket';
 import { authenticateToken } from './services/middleware/auth';
 
@@ -54,7 +50,6 @@ app.use(express.json({ limit: '10mb' }));
 
 // Registrar rutas
 app.use('/api/auth', authRoutes);
-app.use('/api/debug-env', debugRoutes);
 app.use('/api/binance', binanceRoutes);
 app.use('/api/alertas', alertasRoutes);
 app.use('/api/notificaciones', authenticateToken, notificacionesRoutes);
@@ -100,35 +95,22 @@ app.get("/", (req, res) => {
 });
 
 /**
- * @route GET /health
- * @description Endpoint de health check para monitorización
- * @access Público
- */
-app.get("/health", (req, res) => {
-  res.json({ 
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-/**
  * @route GET /debug-cors
  * @description Endpoint para debug de CORS
  * @access Público
  */
-app.get("/debug-cors", (req, res) => {
-  res.json({
-    message: "✅ CORS debug endpoint",
-    origin: req.headers.origin,
-    allowedOrigins: [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'https://dportfolio-backend-production.up.railway.app'
-    ],
-    timestamp: new Date().toISOString()
-  });
-});
+// app.get("/debug-cors", (req, res) => {
+//   res.json({
+//     message: "✅ CORS debug endpoint",
+//     origin: req.headers.origin,
+//     allowedOrigins: [
+//       'http://localhost:3000',
+//       'http://localhost:5173',
+//       'https://dportfolio-backend-production.up.railway.app'
+//     ],
+//     timestamp: new Date().toISOString()
+//   });
+// });
 
 // =============================================================================
 // MANEJO DE RUTAS NO ENCONTRADAS (404)
@@ -146,13 +128,13 @@ app.use("*", (req, res) => {
 // INICIALIZACIÓN DEL SERVIDOR
 // =============================================================================
 
-// Crear servidor HTTP explícitamente (en lugar de usar app.listen)
+// Crear servidor HTTP explícitamente
 const server = createServer(app);
 
 // Inicializar WebSocketService con el servidor HTTP
 webSocketService.initialize(server);
 
-// Ahora iniciamos el servidor con server.listen en lugar de app.listen
+// Ahora iniciamos el servidor
 server.listen(port, () => {
   const address = server.address();
   const host = isProduction ? '0.0.0.0' : 'localhost';
@@ -169,8 +151,6 @@ server.listen(port, () => {
   // Verificar el estado del WebSocketService
   console.log(`📊 WebSocket Service: ${webSocketService ? 'ACTIVO' : 'INACTIVO'}`);
 });
-
-console.log("jwt token: "+process.env.JWT_SECRET_KEY);
 
 // Iniciar el monitoreo de precios cuando el servidor arranque
 monitorService.startPriceMonitoring((prices) => {
