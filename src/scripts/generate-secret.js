@@ -1,4 +1,5 @@
 // scripts/generate-secret.js
+// Clase para generar jwtTokens
 const crypto = require('crypto');
 
 // Genera una clave segura de 64 bytes (512 bits)

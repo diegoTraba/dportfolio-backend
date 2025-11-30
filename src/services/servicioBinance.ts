@@ -9,85 +9,8 @@
  * 3. Calcular el valor total en USD de todos los activos
  */
 
-// =============================================================================
-// INTERFACES Y TIPOS
-// =============================================================================
-
-export interface BinanceCredentials {
-  apiKey: string;
-  apiSecret: string;
-}
-
-export interface BinanceBalance {
-  asset: string;
-  free: string;
-  locked: string;
-}
-
-export interface FlexiblePosition {
-  asset: string;
-  totalAmount: string;
-  annualPercentageRate: string;
-}
-
-export interface LockedPosition {
-  asset: string;
-  totalAmount: string;
-  positionId: string;
-  projectId: string;
-}
-
-export interface SimpleEarnAccount {
-  totalAmountInBTC?: string;
-  totalAmountInUSDT?: string;
-  totalFlexibleAmountInBTC?: string;
-  totalLockedAmountInBTC?: string;
-}
-
-export interface TickerPrice {
-  symbol: string;
-  price: string;
-}
-
-export interface SimpleEarnFlexibleResponse {
-  rows: FlexiblePosition[];
-  total: number;
-}
-
-export interface SimpleEarnLockedResponse {
-  rows: LockedPosition[];
-  total: number;
-}
-
-// Interface para la respuesta de la cuenta de Binance
-interface BinanceAccountResponse {
-  balances: BinanceBalance[];
-  // otras propiedades que pueda tener la respuesta...
-}
-
-// Añade estas interfaces en servicioBinance.ts
-export interface BinanceTrade {
-  id: number;
-  orderId: number;
-  symbol: string;
-  price: string;
-  qty: string;
-  quoteQty: string;
-  commission: string;
-  commissionAsset: string;
-  time: number;
-  isBuyer: boolean;
-  isMaker: boolean;
-  isBestMatch: boolean;
-}
-
-export interface TradeHistoryParams {
-  symbol?: string;
-  startTime?: number;
-  endTime?: number;
-  fromId?: number;
-  limit?: number;
-}
+// Importamos las interfaces necesarias
+import {BinanceCredentials,BinanceBalance,SimpleEarnAccount,SimpleEarnFlexibleResponse,SimpleEarnLockedResponse,BinanceAccountResponse,BinanceTrade,TickerPrice,TradeHistoryParams} from  "../interfaces/binance.types";
 
 // Lista fija de símbolos a consultar
 export const SUPPORTED_SYMBOLS = [
@@ -583,23 +506,23 @@ class BinanceService {
     }
   }
 
-  /**
-   * Método makeRequest genérico para requests públicos
-   */
-  private async makeRequest(endpoint: string): Promise<any> {
-    try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`);
+  // /**
+  //  * Método makeRequest genérico para requests públicos
+  //  */
+  // private async makeRequest(endpoint: string): Promise<any> {
+  //   try {
+  //     const response = await fetch(`${this.baseUrl}${endpoint}`);
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+  //     if (!response.ok) {
+  //       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  //     }
 
-      return await response.json();
-    } catch (error) {
-      console.error(`Error en makeRequest para ${endpoint}:`, error);
-      throw error;
-    }
-  }
+  //     return await response.json();
+  //   } catch (error) {
+  //     console.error(`Error en makeRequest para ${endpoint}:`, error);
+  //     throw error;
+  //   }
+  // }
 
   // ===========================================================================
   // MÉTODOS DE AUTENTICACIÓN

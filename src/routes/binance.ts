@@ -3,11 +3,10 @@ import { getSupabaseClient } from "../lib/supabase.js";
 import { encrypt, decrypt } from "../lib/encriptacion.js";
 import {
   binanceService,
-  BinanceCredentials,
-  TradeHistoryParams,
   SUPPORTED_SYMBOLS,
   isValidSymbol
 } from "../services/servicioBinance.js";
+import {BinanceCredentials,TradeHistoryParams} from "../interfaces/binance.types.js"
 
 const binanceRouter = express.Router();
 
