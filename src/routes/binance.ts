@@ -432,21 +432,120 @@ binanceRouter.get(
 
       // console.log(`✅ ${formattedTrades.length} compras obtenidas de todos los símbolos`);
 
-      // return res.json({
-      //   success: true,
-      //   trades: formattedTrades,
-      //   total: formattedTrades.length,
-      //   symbolsScanned: SUPPORTED_SYMBOLS,
-      //   query: {
-      //     startTime: startTime ? new Date(parseInt(startTime as string)).toISOString() : null,
-      //     endTime: endTime ? new Date(parseInt(endTime as string)).toISOString() : null,
-      //     limit: parseInt(limit as string)
-      //   }
-      // });
+      return res.json({
+        success: true,
+        trades: allBuyTrades.length
+      });
     } catch (error) {
       console.error("❌ Error obteniendo todas las compras:", error);
       return res.status(500).json({
         error: "Error al obtener el historial completo de compras",
+        details: error instanceof Error ? error.message : "Error desconocido",
+      });
+    }
+  }
+);
+
+// Endpoint para obtener las compras activas (no vendidas) de un usuario
+binanceRouter.get(
+  "/compras-activas/:userId",
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const { 
+        limit = "500",
+        offset = "0",
+        simbolo,
+        orderBy = "fechaCompra",
+        orderDirection = "desc"
+      } = req.query;
+
+      console.log("=== 📋 OBTENIENDO COMPRAS ACTIVAS DEL USUARIO ===");
+      console.log(`👤 User ID: ${userId}`);
+
+      if (!userId || userId.trim().length === 0) {
+        return res.status(400).json({ error: "El userId es requerido" });
+      }
+
+      const supabase = getSupabaseClient();
+      
+      // Construir la consulta base
+      let query = supabase
+        .from("compras")
+        .select("*", { count: 'exact' })
+        .eq("idUsuario", userId)
+        .eq("vendida", false);
+
+      // Aplicar filtro por símbolo si se proporciona
+      if (simbolo && simbolo.toString().trim() !== "") {
+        query = query.ilike("simbolo", `%${simbolo.toString().toUpperCase()}%`);
+        console.log(`🔍 Filtro por símbolo: ${simbolo}`);
+      }
+
+      // Aplicar ordenamiento
+      const orden = orderDirection === "asc" ? orderDirection : "desc";
+      query = query.order(orderBy.toString(), { ascending: orden === "asc" });
+
+      // Aplicar paginación
+      const limite = parseInt(limit as string);
+      const desplazamiento = parseInt(offset as string);
+      query = query.range(desplazamiento, desplazamiento + limite - 1);
+
+      // Ejecutar consulta
+      const { data: compras, error, count } = await query;
+
+      if (error) {
+        console.error("❌ Error obteniendo compras activas:", error);
+        return res.status(500).json({
+          error: "Error al obtener las compras activas",
+          details: error.message,
+        });
+      }
+
+      console.log(`✅ ${compras?.length || 0} compras activas encontradas`);
+
+      // Calcular estadísticas adicionales
+      let valorTotalInvertido = 0;
+      let cantidadTotalCriptos = 0;
+      const simbolosUnicos = new Set<string>();
+
+      if (compras && compras.length > 0) {
+        compras.forEach(compra => {
+          valorTotalInvertido += compra.total || 0;
+          cantidadTotalCriptos += compra.cantidad || 0;
+          simbolosUnicos.add(compra.simbolo);
+        });
+      }
+
+      const estadisticas = {
+        totalCompras: count || 0,
+        valorTotalInvertido: parseFloat(valorTotalInvertido.toFixed(2)),
+        cantidadTotalCriptos: parseFloat(cantidadTotalCriptos.toFixed(8)),
+        cantidadSimbolosDiferentes: simbolosUnicos.size,
+        fechaConsulta: new Date().toISOString()
+      };
+
+      return res.json({
+        success: true,
+        compras: compras || [],
+        paginacion: {
+          total: count || 0,
+          limite,
+          desplazamiento,
+          paginas: Math.ceil((count || 0) / limite)
+        },
+        estadisticas,
+        filtros: {
+          simbolo: simbolo || null,
+          orderBy,
+          orderDirection: orden
+        }
+      });
+
+    } catch (error) {
+      console.error("❌ Error inesperado obteniendo compras activas:", error);
+      return res.status(500).json({
+        error: "Error interno del servidor",
         details: error instanceof Error ? error.message : "Error desconocido",
       });
     }
