@@ -375,8 +375,7 @@ binanceRouter.get(
             comision: parseFloat(trade.commission),
             fechaCompra: new Date(trade.time).toISOString(),
             vendida: false,
-            user_id: userId,
-            asset_comision: trade.commissionAsset,
+            user_id: userId
           };
 
           // Insertar en la base de datos
