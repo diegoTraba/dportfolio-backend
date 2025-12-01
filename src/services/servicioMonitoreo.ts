@@ -2,86 +2,153 @@ import { binanceService } from "./servicioBinance.js";
 import { getSupabaseClient } from "../lib/supabase.js";
 import {webSocketService} from "./servicioWebSocket.js";
 
-export interface PriceData {
-  symbol: string;
-  price: number;
-  timestamp: string;
+export interface DatosPrecio {
+  simbolo: string;
+  precio: number;
+  fechaActualizacion: string;
 }
 
-export class MonitorService {
-  private isMonitoring: boolean = false;
-  private intervalId: NodeJS.Timeout | null = null;
+export class ServicioMonitoreo  {
+  private estaMonitoreando: boolean = false;
+  private idIntervalo: NodeJS.Timeout | null = null;
 
   // Obtener precio de un símbolo específico
-  async getSymbolPrice(symbol: string): Promise<PriceData> {
+  async obtenerPrecioSimbolo(simbolo: string): Promise<DatosPrecio> {
     try {
-      const price = await binanceService.getPrice(symbol.toUpperCase());
+      const precio = await binanceService.getPrice(simbolo.toUpperCase());
       return {
-        symbol: symbol.toUpperCase(),
-        price,
-        timestamp: new Date().toISOString(),
+        simbolo: simbolo.toUpperCase(),
+        precio,
+        fechaActualizacion: new Date().toISOString(),
       };
     } catch (error) {
-      console.error(`Error obteniendo precio para ${symbol}:`, error);
+      console.error(`Error obteniendo precio para ${simbolo}:`, error);
       throw error;
     }
   }
 
   // Obtener precios de múltiples símbolos
-  async getMultiplePrices(
-    symbols: string[]
-  ): Promise<{ [key: string]: PriceData }> {
-    const prices: { [key: string]: PriceData } = {};
+  async obtenerMultiplesPrecios(
+    simbolos: string[]
+  ): Promise<{ [key: string]: DatosPrecio }> {
+    const precios: { [key: string]: DatosPrecio } = {};
 
-    for (const symbol of symbols) {
+    for (const simbolo of simbolos) {
       try {
-        const priceData = await this.getSymbolPrice(symbol);
-        prices[symbol] = priceData;
+        const datosPrecio = await this.obtenerPrecioSimbolo(simbolo);
+        precios[simbolo] = datosPrecio;
       } catch (error) {
-        console.error(`Error obteniendo precio para ${symbol}:`, error);
+        console.error(`Error obteniendo precio para ${simbolo}:`, error);
         // Podrías devolver un valor por defecto o manejarlo de otra forma
-        prices[symbol] = {
-          symbol,
-          price: 0,
-          timestamp: new Date().toISOString(),
+        precios[simbolo] = {
+          simbolo,
+          precio: 0,
+          fechaActualizacion: new Date().toISOString(),
         };
       }
     }
 
-    return prices;
+    return precios;
   }
 
-  // Iniciar monitoreo periódico (cada segundo)
-  startPriceMonitoring(
-    callback: (prices: { [key: string]: PriceData }) => void,
-    intervalMs: number = 60000
+  // Guardar o actualizar precios en la base de datos
+  private async guardarPreciosEnBD(precios: { [key: string]: DatosPrecio }): Promise<void> {
+    try {
+      const supabase = getSupabaseClient();
+      const datosPrecio = Object.values(precios);
+
+      console.log(`💾 Guardando ${datosPrecio.length} precios en la base de datos...`);
+
+      for (const precioData of datosPrecio) {
+        try {
+          // Verificar si el símbolo ya existe en la base de datos
+          const { data: precioExistente, error: errorConsulta } = await supabase
+            .from("precioCriptomoneda")
+            .select("id, simbolo")
+            .eq("simbolo", precioData.simbolo)
+            .maybeSingle();
+
+          if (errorConsulta) {
+            console.error(`❌ Error verificando símbolo ${precioData.simbolo}:`, errorConsulta);
+            continue;
+          }
+
+          if (precioExistente) {
+            // Actualizar precio existente
+            const { error: errorActualizacion } = await supabase
+              .from("precioCriptomoneda")
+              .update({
+                precio: precioData.precio,
+                fechaActualizacion: precioData.fechaActualizacion
+              })
+              .eq("simbolo", precioData.simbolo);
+
+            if (errorActualizacion) {
+              console.error(`❌ Error actualizando ${precioData.simbolo}:`, errorActualizacion);
+            } else {
+              console.log(`✅ Actualizado: ${precioData.simbolo} = $${precioData.precio}`);
+            }
+          } else {
+            // Insertar nuevo precio
+            const { error: errorInsercion } = await supabase
+              .from("precioCriptomoneda")
+              .insert([{
+                simbolo: precioData.simbolo,
+                precio: precioData.precio,
+                fechaActualizacion: precioData.fechaActualizacion
+              }]);
+
+            if (errorInsercion) {
+              console.error(`❌ Error insertando ${precioData.simbolo}:`, errorInsercion);
+            } else {
+              console.log(`➕ Insertado: ${precioData.simbolo} = $${precioData.precio}`);
+            }
+          }
+        } catch (error) {
+          console.error(`💥 Error procesando ${precioData.simbolo}:`, error);
+        }
+      }
+
+      console.log("📊 Precios guardados en base de datos exitosamente");
+    } catch (error) {
+      console.error("💥 Error general guardando precios en BD:", error);
+    }
+  }
+
+  // Iniciar monitoreo periódico (cada 2 min)
+  iniciarMonitoreoPrecios(
+    callback: (precios: { [key: string]: DatosPrecio }) => void,
+    intervalMs: number = 120000
   ) {
-    if (this.isMonitoring) {
+    if (this.estaMonitoreando) {
       console.log("⚠️ El monitoreo ya está activo");
       return;
     }
 
-    this.isMonitoring = true;
+    this.estaMonitoreando = true;
     console.log(`🚀 Iniciando monitoreo de precios cada ${intervalMs}ms`);
 
-    this.intervalId = setInterval(async () => {
+    this.idIntervalo = setInterval(async () => {
       try {
         console.log("\n=== 🔄 CICLO DE MONITOREO ===");
         console.log("⏰", new Date().toISOString());
 
         // Símbolos a monitorear (puedes hacer esto dinámico basado en las alertas de la BD)
-        const symbolsToMonitor = ["BTCUSDT", "ETHUSDT", "ADAUSDT", "SOLUSDT"];
-        console.log("📊 Símbolos a monitorear:", symbolsToMonitor);
+        const simbolosAMonitorear  = ["BTCUSDC", "ETHUSDC", "ADAUSDC", "SOLUSDC", "XRPUSDC","BNBUSDC","LINKUSDC"];
+        console.log("📊 Símbolos a monitorear:", simbolosAMonitorear );
 
-        const prices = await this.getMultiplePrices(symbolsToMonitor);
+        const precios = await this.obtenerMultiplesPrecios(simbolosAMonitorear );
 
-        console.log("💰 Precios obtenidos:", prices);
+        console.log("💰 Precios obtenidos:", precios);
+
+        // Guardar precios en la base de datos
+        await this.guardarPreciosEnBD(precios);
 
         // Llamar al callback con los precios actualizados
-        callback(prices);
+        callback(precios);
 
         // Aquí podrías añadir lógica para verificar alertas
-        await this.checkAlerts(prices);
+        await this.verificarAlertas(precios);
 
         console.log("✅ Ciclo de monitoreo completado\n");
       } catch (error) {
@@ -91,20 +158,20 @@ export class MonitorService {
   }
 
   // Detener monitoreo
-  stopPriceMonitoring() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-      this.isMonitoring = false;
+  detenerMonitoreoPrecios() {
+    if (this.idIntervalo) {
+      clearInterval(this.idIntervalo);
+      this.idIntervalo = null;
+      this.estaMonitoreando = false;
       console.log("Monitoreo de precios detenido");
     }
   }
 
   // Verificar alertas (esto es donde la magia ocurre)
-  private async checkAlerts(prices: { [key: string]: PriceData }) {
+  private async verificarAlertas(precios: { [key: string]: DatosPrecio }) {
     try {
       console.log("🔍 Iniciando verificación de alertas...");
-      console.log("📊 Precios actuales:", prices);
+      console.log("📊 Precios actuales:", precios);
 
       const supabase = getSupabaseClient();
 
@@ -133,42 +200,42 @@ export class MonitorService {
           `   Cripto: ${alerta.criptomoneda}, Condición: ${alerta.condicion}, Objetivo: $${alerta.precio_objetivo}`
         );
 
-        const symbol = `${alerta.criptomoneda}USDT`;
-        const currentPrice = prices[symbol]?.price;
+        const simbolo = `${alerta.criptomoneda}USDT`;
+        const precioActual  = precios[simbolo]?.precio;
 
-        console.log(`   Símbolo buscado: ${symbol}`);
-        console.log(`   Precio actual: $${currentPrice}`);
+        console.log(`   Símbolo buscado: ${simbolo}`);
+        console.log(`   Precio actual: $${precioActual }`);
 
-        if (!currentPrice) {
-          console.log(`   ⚠️ Precio no disponible para ${symbol}`);
+        if (!precioActual ) {
+          console.log(`   ⚠️ Precio no disponible para ${simbolo}`);
           continue;
         }
 
-        let conditionMet = false;
+        let condicionCumplida  = false;
 
         if (
           alerta.condicion === "por encima de" &&
-          currentPrice >= alerta.precio_objetivo
+          precioActual  >= alerta.precio_objetivo
         ) {
-          conditionMet = true;
+          condicionCumplida = true;
           console.log(
-            `   ✅ CONDICIÓN CUMPLIDA: ${currentPrice} >= ${alerta.precio_objetivo}`
+            `   ✅ CONDICIÓN CUMPLIDA: ${precioActual } >= ${alerta.precio_objetivo}`
           );
         } else if (
           alerta.condicion === "por debajo de" &&
-          currentPrice <= alerta.precio_objetivo
+          precioActual  <= alerta.precio_objetivo
         ) {
-          conditionMet = true;
+          condicionCumplida = true;
           console.log(
-            `   ✅ CONDICIÓN CUMPLIDA: ${currentPrice} <= ${alerta.precio_objetivo}`
+            `   ✅ CONDICIÓN CUMPLIDA: ${precioActual } <= ${alerta.precio_objetivo}`
           );
         } else {
           console.log(
-            `   ❌ Condición NO cumplida: ${currentPrice} ${alerta.condicion} ${alerta.precio_objetivo}`
+            `   ❌ Condición NO cumplida: ${precioActual } ${alerta.condicion} ${alerta.precio_objetivo}`
           );
         }
 
-        if (conditionMet) {
+        if (condicionCumplida) {
           console.log(`   🚀 Activando alerta ${alerta.id}...`);
 
           // Actualizar alerta como activa
@@ -177,7 +244,7 @@ export class MonitorService {
             .update({
               estado: "activo",
               activado: new Date().toISOString(),
-              precio_actual: currentPrice,
+              precio_actual: precioActual ,
               leido: false,
             })
             .eq("id", alerta.id);
@@ -190,7 +257,7 @@ export class MonitorService {
           } else {
             console.log(`   ✅ Alerta ${alerta.id} activada correctamente!`);
             console.log(
-              `   🎯 ${alerta.criptomoneda} alcanzó $${currentPrice} (objetivo: $${alerta.precio_objetivo})`
+              `   🎯 ${alerta.criptomoneda} alcanzó $${precioActual } (objetivo: $${alerta.precio_objetivo})`
             );
           }
 
@@ -200,7 +267,7 @@ export class MonitorService {
             id: alerta.id,
             criptomoneda: alerta.criptomoneda,
             precio_objetivo: alerta.precio_objetivo,
-            precio_actual: currentPrice,
+            precio_actual: precioActual ,
             condicion: alerta.condicion,
           });
 
@@ -218,4 +285,4 @@ export class MonitorService {
   }
 }
 
-export const monitorService = new MonitorService();
+export const monitorService = new ServicioMonitoreo();
