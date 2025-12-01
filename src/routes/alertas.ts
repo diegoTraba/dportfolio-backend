@@ -181,7 +181,7 @@ alertasRouter.delete("/:id", async (req: Request, res: Response) => {
 alertasRouter.get("/price/:symbol", async (req: Request, res: Response) => {
   try {
     const { symbol } = req.params;
-    const priceData = await monitorService.getSymbolPrice(symbol);
+    const priceData = await monitorService.obtenerPrecioSimbolo(symbol);
     return res.json(priceData);
   } catch (error) {
     console.error("Error obteniendo precio:", error);
