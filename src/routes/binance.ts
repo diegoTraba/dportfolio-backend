@@ -4,9 +4,12 @@ import { encrypt, decrypt } from "../lib/encriptacion.js";
 import {
   binanceService,
   SUPPORTED_SYMBOLS,
-  isValidSymbol
+  isValidSymbol,
 } from "../services/servicioBinance.js";
-import {BinanceCredentials,TradeHistoryParams} from "../interfaces/binance.types.js"
+import {
+  BinanceCredentials,
+  TradeHistoryParams,
+} from "../interfaces/binance.types.js";
 
 const binanceRouter = express.Router();
 
@@ -111,9 +114,11 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
         message: error.message,
         details: error.details,
         hint: error.hint,
-        code: error.code
+        code: error.code,
       });
-      return res.status(500).json({ error: "Error al consultar la base de datos" });
+      return res
+        .status(500)
+        .json({ error: "Error al consultar la base de datos" });
     }
     if (!exchange) {
       return res.json({
@@ -141,15 +146,13 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
       .eq("user_id", userId)
       .eq("is_active", true);
 
-    return res.json({ 
+    return res.json({
       totalUSD,
       connected: true,
       exchangesCount: exchangesCount,
       currency: "USD",
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
     });
-
-    
   } catch (error) {
     console.error("Error obteniendo balance:", error);
     return res.json({
@@ -164,12 +167,7 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
 binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    const { 
-      symbol, 
-      startTime, 
-      endTime, 
-      limit = "100" 
-    } = req.query;
+    const { symbol, startTime, endTime, limit = "100" } = req.query;
 
     console.log("=== 🛒 OBTENIENDO COMPRAS DEL USUARIO ===");
 
@@ -179,17 +177,17 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
     }
 
     if (!symbol) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "El parámetro 'symbol' es obligatorio",
-        supportedSymbols: SUPPORTED_SYMBOLS
+        supportedSymbols: SUPPORTED_SYMBOLS,
       });
     }
 
     const symbolStr = symbol as string;
     if (!isValidSymbol(symbolStr)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: `Símbolo '${symbolStr}' no soportado`,
-        supportedSymbols: SUPPORTED_SYMBOLS
+        supportedSymbols: SUPPORTED_SYMBOLS,
       });
     }
 
@@ -205,8 +203,8 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
 
     if (error || !exchange) {
       console.error("❌ Error obteniendo exchange:", error);
-      return res.status(404).json({ 
-        error: "No se encontró conexión activa de Binance para este usuario" 
+      return res.status(404).json({
+        error: "No se encontró conexión activa de Binance para este usuario",
       });
     }
 
@@ -222,7 +220,7 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
     // Preparar parámetros para la consulta
     const tradeParams: TradeHistoryParams = {
       symbol: symbolStr,
-      limit: parseInt(limit as string)
+      limit: parseInt(limit as string),
     };
 
     if (startTime) {
@@ -234,10 +232,13 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
     }
 
     // Obtener las compras del usuario
-    const buyTrades = await binanceService.getUserTrades(credentials, tradeParams);
+    const buyTrades = await binanceService.getUserTrades(
+      credentials,
+      tradeParams
+    );
 
     // Formatear la respuesta
-    const formattedTrades = buyTrades.map(trade => ({
+    const formattedTrades = buyTrades.map((trade) => ({
       id: trade.id,
       orderId: trade.orderId,
       symbol: trade.symbol,
@@ -249,10 +250,12 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
       timestamp: trade.time,
       date: new Date(trade.time).toISOString(),
       isBuyer: trade.isBuyer,
-      isMaker: trade.isMaker
+      isMaker: trade.isMaker,
     }));
 
-    console.log(`✅ ${formattedTrades.length} compras obtenidas para ${symbolStr}`);
+    console.log(
+      `✅ ${formattedTrades.length} compras obtenidas para ${symbolStr}`
+    );
 
     return res.json({
       success: true,
@@ -260,165 +263,246 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
       trades: formattedTrades,
       total: formattedTrades.length,
       query: {
-        startTime: startTime ? new Date(parseInt(startTime as string)).toISOString() : null,
-        endTime: endTime ? new Date(parseInt(endTime as string)).toISOString() : null,
-        limit: parseInt(limit as string)
-      }
+        startTime: startTime
+          ? new Date(parseInt(startTime as string)).toISOString()
+          : null,
+        endTime: endTime
+          ? new Date(parseInt(endTime as string)).toISOString()
+          : null,
+        limit: parseInt(limit as string),
+      },
     });
-
   } catch (error) {
     console.error("❌ Error obteniendo compras del usuario:", error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Error al obtener el historial de compras",
-      details: error instanceof Error ? error.message : "Error desconocido"
+      details: error instanceof Error ? error.message : "Error desconocido",
     });
   }
 });
 
 // Obtener todas las compras del usuario para todos los símbolos soportados
-binanceRouter.get("/all-trades/:userId", async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
-    const { 
-      startTime, 
-      endTime, 
-      limit = "100" 
-    } = req.query;
+binanceRouter.get(
+  "/all-trades/:userId",
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const { startTime, endTime, limit = "100" } = req.query;
 
-    console.log("=== 🛒 OBTENIENDO TODAS LAS COMPRAS DEL USUARIO ===");
+      console.log("=== 🛒 OBTENIENDO TODAS LAS COMPRAS DEL USUARIO ===");
 
-    if (!userId || userId.trim().length === 0) {
-      return res.status(400).json({ error: "El userId es requerido" });
-    }
+      if (!userId || userId.trim().length === 0) {
+        return res.status(400).json({ error: "El userId es requerido" });
+      }
 
-    // Obtener credenciales de Binance del usuario
-    const supabase = getSupabaseClient();
-    const { data: exchange, error } = await supabase
-      .from("exchanges")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("exchange", "BINANCE")
-      .eq("is_active", true)
-      .single();
+      // Obtener credenciales de Binance del usuario
+      const supabase = getSupabaseClient();
+      const { data: exchange, error } = await supabase
+        .from("exchanges")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("exchange", "BINANCE")
+        .eq("is_active", true)
+        .single();
 
-    if (error || !exchange) {
-      console.error("❌ Error obteniendo exchange:", error);
-      return res.status(404).json({ 
-        error: "No se encontró conexión activa de Binance para este usuario" 
+      if (error || !exchange) {
+        console.error("❌ Error obteniendo exchange:", error);
+        return res.status(404).json({
+          error: "No se encontró conexión activa de Binance para este usuario",
+        });
+      }
+
+      // Desencriptar credenciales
+      const decryptedApiKey = decrypt(exchange.api_key);
+      const decryptedApiSecret = decrypt(exchange.api_secret);
+
+      const credentials: BinanceCredentials = {
+        apiKey: decryptedApiKey,
+        apiSecret: decryptedApiSecret,
+      };
+
+      // Preparar parámetros para la consulta
+      const tradeParams: Omit<TradeHistoryParams, "symbol"> = {
+        limit: parseInt(limit as string),
+      };
+
+      if (startTime) {
+        tradeParams.startTime = parseInt(startTime as string);
+      }
+
+      if (endTime) {
+        tradeParams.endTime = parseInt(endTime as string);
+      }
+
+      // Obtener todas las compras del usuario para todos los símbolos soportados
+      const allBuyTrades = await binanceService.getAllUserTrades(
+        credentials,
+        tradeParams
+      );
+
+      for (const trade of allBuyTrades) {
+        try {
+          // Verificar si la compra ya existe en la base de datos
+          const { data: compraExistente, error: errorConsulta } = await supabase
+            .from("compras")
+            .select("id")
+            .eq("idOrden", trade.orderId)
+            .eq("simbolo", trade.symbol)
+            .maybeSingle();
+
+          if (errorConsulta) {
+            console.error(
+              `❌ Error verificando compra ${trade.orderId} - ${trade.symbol}:`,
+              errorConsulta
+            );
+            continue;
+          }
+          if (compraExistente) {
+            console.log(
+              `⏭️ Compra ya existe en BD: ${trade.symbol} - Orden ${trade.orderId}`
+            );
+            continue;
+          }
+
+          // Preparar datos para insertar
+          const datosCompra = {
+            exchange: "Binance",
+            idOrden: trade.orderId.toString(),
+            simbolo: trade.symbol,
+            precio: parseFloat(trade.price),
+            cantidad: parseFloat(trade.qty),
+            total: parseFloat(trade.quoteQty),
+            comision: parseFloat(trade.commission),
+            fechaCompra: new Date(trade.time).toISOString(),
+            vendida: false,
+            user_id: userId,
+            asset_comision: trade.commissionAsset,
+          };
+
+          // Insertar en la base de datos
+          const { data: nuevaCompra, error: errorInsercion } = await supabase
+            .from("compras")
+            .insert([datosCompra])
+            .select();
+
+          if (errorInsercion) {
+            console.error(
+              `❌ Error guardando compra ${trade.orderId} - ${trade.symbol}:`,
+              errorInsercion
+            );
+
+            // Si el error es por duplicado, continuar
+            if (errorInsercion.code === "23505") {
+              continue;
+            }
+          } else {
+            console.log(
+              `✅ Guardada: ${trade.symbol} - ${trade.qty} @ $${trade.price}`
+            );
+          }
+        } catch (error) {
+          console.error(`💥 Error procesando compra ${trade.orderId}:`, error);
+        }
+      }
+
+      // Formatear estadísticas
+      const estadisticas = {
+        comprasIdentificadas: allBuyTrades.length,
+        fechaSincronizacion: new Date().toISOString(),
+      };
+
+      console.log("=== 📈 RESUMEN DE SINCRONIZACIÓN ===");
+      console.log(
+        `Total transacciones obtenidas: ${estadisticas.comprasIdentificadas}`
+      );
+      // // Formatear la respuesta
+      // const formattedTrades = allBuyTrades.map(trade => ({
+      //   id: trade.id,
+      //   orderId: trade.orderId,
+      //   symbol: trade.symbol,
+      //   price: parseFloat(trade.price),
+      //   quantity: parseFloat(trade.qty),
+      //   total: parseFloat(trade.quoteQty),
+      //   commission: parseFloat(trade.commission),
+      //   commissionAsset: trade.commissionAsset,
+      //   timestamp: trade.time,
+      //   date: new Date(trade.time).toISOString(),
+      //   isBuyer: trade.isBuyer,
+      //   isMaker: trade.isMaker
+      // }));
+
+      // console.log(`✅ ${formattedTrades.length} compras obtenidas de todos los símbolos`);
+
+      // return res.json({
+      //   success: true,
+      //   trades: formattedTrades,
+      //   total: formattedTrades.length,
+      //   symbolsScanned: SUPPORTED_SYMBOLS,
+      //   query: {
+      //     startTime: startTime ? new Date(parseInt(startTime as string)).toISOString() : null,
+      //     endTime: endTime ? new Date(parseInt(endTime as string)).toISOString() : null,
+      //     limit: parseInt(limit as string)
+      //   }
+      // });
+    } catch (error) {
+      console.error("❌ Error obteniendo todas las compras:", error);
+      return res.status(500).json({
+        error: "Error al obtener el historial completo de compras",
+        details: error instanceof Error ? error.message : "Error desconocido",
       });
     }
-
-    // Desencriptar credenciales
-    const decryptedApiKey = decrypt(exchange.api_key);
-    const decryptedApiSecret = decrypt(exchange.api_secret);
-
-    const credentials: BinanceCredentials = {
-      apiKey: decryptedApiKey,
-      apiSecret: decryptedApiSecret,
-    };
-
-    // Preparar parámetros para la consulta
-    const tradeParams: Omit<TradeHistoryParams, 'symbol'> = {
-      limit: parseInt(limit as string)
-    };
-
-    if (startTime) {
-      tradeParams.startTime = parseInt(startTime as string);
-    }
-
-    if (endTime) {
-      tradeParams.endTime = parseInt(endTime as string);
-    }
-
-    // Obtener todas las compras del usuario para todos los símbolos soportados
-    const allBuyTrades = await binanceService.getAllUserTrades(credentials, tradeParams);
-
-    // Formatear la respuesta
-    const formattedTrades = allBuyTrades.map(trade => ({
-      id: trade.id,
-      orderId: trade.orderId,
-      symbol: trade.symbol,
-      price: parseFloat(trade.price),
-      quantity: parseFloat(trade.qty),
-      total: parseFloat(trade.quoteQty),
-      commission: parseFloat(trade.commission),
-      commissionAsset: trade.commissionAsset,
-      timestamp: trade.time,
-      date: new Date(trade.time).toISOString(),
-      isBuyer: trade.isBuyer,
-      isMaker: trade.isMaker
-    }));
-
-    console.log(`✅ ${formattedTrades.length} compras obtenidas de todos los símbolos`);
-
-    return res.json({
-      success: true,
-      trades: formattedTrades,
-      total: formattedTrades.length,
-      symbolsScanned: SUPPORTED_SYMBOLS,
-      query: {
-        startTime: startTime ? new Date(parseInt(startTime as string)).toISOString() : null,
-        endTime: endTime ? new Date(parseInt(endTime as string)).toISOString() : null,
-        limit: parseInt(limit as string)
-      }
-    });
-
-  } catch (error) {
-    console.error("❌ Error obteniendo todas las compras:", error);
-    return res.status(500).json({ 
-      error: "Error al obtener el historial completo de compras",
-      details: error instanceof Error ? error.message : "Error desconocido"
-    });
   }
-});
+);
 
 // Obtener símbolos con actividad del usuario
-binanceRouter.get("/trade-symbols/:userId", async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
+binanceRouter.get(
+  "/trade-symbols/:userId",
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
 
-    if (!userId || userId.trim().length === 0) {
-      return res.status(400).json({ error: "El userId es requerido" });
-    }
+      if (!userId || userId.trim().length === 0) {
+        return res.status(400).json({ error: "El userId es requerido" });
+      }
 
-    // Obtener credenciales (misma lógica que el endpoint anterior)
-    const supabase = getSupabaseClient();
-    const { data: exchange, error } = await supabase
-      .from("exchanges")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("exchange", "BINANCE")
-      .eq("is_active", true)
-      .single();
+      // Obtener credenciales (misma lógica que el endpoint anterior)
+      const supabase = getSupabaseClient();
+      const { data: exchange, error } = await supabase
+        .from("exchanges")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("exchange", "BINANCE")
+        .eq("is_active", true)
+        .single();
 
-    if (error || !exchange) {
-      return res.status(404).json({ 
-        error: "No se encontró conexión activa de Binance para este usuario" 
+      if (error || !exchange) {
+        return res.status(404).json({
+          error: "No se encontró conexión activa de Binance para este usuario",
+        });
+      }
+
+      const decryptedApiKey = decrypt(exchange.api_key);
+      const decryptedApiSecret = decrypt(exchange.api_secret);
+
+      const credentials: BinanceCredentials = {
+        apiKey: decryptedApiKey,
+        apiSecret: decryptedApiSecret,
+      };
+
+      const symbols = await binanceService.getUserTradeSymbols(credentials);
+
+      return res.json({
+        success: true,
+        symbols,
+        total: symbols.length,
+      });
+    } catch (error) {
+      console.error("❌ Error obteniendo símbolos:", error);
+      return res.status(500).json({
+        error: "Error al obtener los símbolos con actividad",
       });
     }
-
-    const decryptedApiKey = decrypt(exchange.api_key);
-    const decryptedApiSecret = decrypt(exchange.api_secret);
-
-    const credentials: BinanceCredentials = {
-      apiKey: decryptedApiKey,
-      apiSecret: decryptedApiSecret,
-    };
-
-    const symbols = await binanceService.getUserTradeSymbols(credentials);
-
-    return res.json({
-      success: true,
-      symbols,
-      total: symbols.length
-    });
-
-  } catch (error) {
-    console.error("❌ Error obteniendo símbolos:", error);
-    return res.status(500).json({ 
-      error: "Error al obtener los símbolos con actividad"
-    });
   }
-});
+);
 
 export default binanceRouter;
