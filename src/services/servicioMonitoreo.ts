@@ -200,7 +200,7 @@ export class ServicioMonitoreo  {
           `   Cripto: ${alerta.criptomoneda}, Condición: ${alerta.condicion}, Objetivo: $${alerta.precio_objetivo}`
         );
 
-        const simbolo = `${alerta.criptomoneda}USDT`;
+        const simbolo = `${alerta.criptomoneda}USDC`;
         const precioActual  = precios[simbolo]?.precio;
 
         console.log(`   Símbolo buscado: ${simbolo}`);
