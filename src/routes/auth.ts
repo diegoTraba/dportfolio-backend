@@ -55,7 +55,7 @@ router.post('/login', async (req: Request, res: Response) => {
     // Devolver el token y la información del usuario (sin la contraseña)
     res.json({
       token,
-      user: {
+      usuario: {
         id: user.id,
         email: user.email,
         name: user.name,
