@@ -69,7 +69,7 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // Ruta actualizar último acceso
-router.post('/actulizarUltimoAcceso', async (req: Request, res: Response) => {
+router.post('/actualizarUltimoAcceso', async (req: Request, res: Response) => {
   try {
     console.log('🚪 Procesando cierre de sesión...');
 
