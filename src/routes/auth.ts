@@ -4,7 +4,7 @@ import { Router, Request, Response } from 'express';
 import { getSupabaseClient } from '../lib/supabase';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-
+import { servicioUsuario } from '../services/servicioUsuario';
 const router = Router();
 
 router.post('/login', async (req: Request, res: Response) => {
@@ -111,39 +111,28 @@ router.post('/actualizarUltimoAcceso', async (req: Request, res: Response) => {
 
     console.log(`👤 Actualizando último acceso para usuario ID: ${userId}`);
 
-    const supabase = getSupabaseClient();
-    
-    // Actualizar el campo últimoAcceso en la tabla users
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({ 
-        ultimoAcceso: new Date().toISOString() 
-      })
-      .eq('id', userId);
-
-    if (updateError) {
-      console.error('❌ Error al actualizar último acceso:', updateError);
+    // Llamar al servicio para actualizar el último acceso
+    try {
+      await servicioUsuario.actualizarUltimoAcceso(userId);
+      console.log(`✅ Último acceso actualizado para usuario ID: ${userId}`);
+    } catch (error) {
+      console.error('❌ Error al actualizar último acceso:', error);
       return res.status(500).json({ 
         error: 'Error al actualizar último acceso',
-        details: updateError.message 
+        details: error instanceof Error ? error.message : 'Error desconocido'
       });
     }
 
-    console.log(`✅ Último acceso actualizado para usuario ID: ${userId}`);
-    
-    // Opcional: Podrías invalidar el token aquí si implementas una blacklist
-    // Pero con JWT stateless, simplemente el cliente eliminará el token
-
     res.json({
       success: true,
-      message: 'Sesión cerrada y último acceso actualizado correctamente',
+      message: 'Último acceso actualizado correctamente',
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('💥 Error inesperado en logout:', error);
     res.status(500).json({ 
-      error: 'Error interno del servidor al cerrar sesión',
+      error: 'Error interno del servidor al actualizar ultima conexion',
       details: error instanceof Error ? error.message : 'Error desconocido'
     });
   }
