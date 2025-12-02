@@ -10,7 +10,7 @@ export const servicioUsuario = {
     const supabase = getSupabaseClient();
     
     const { error } = await supabase
-      .from('users')
+      .from('usuarios')
       .update({ 
         ultimoAcceso: new Date().toISOString() 
       })

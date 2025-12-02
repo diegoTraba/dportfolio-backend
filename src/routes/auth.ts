@@ -22,7 +22,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const supabase = getSupabaseClient();
     // Buscar el usuario por email
     const { data: user, error } = await supabase
-      .from('users')
+      .from('usuarios')
       .select('*')
       .eq('email', email)
       .single();
