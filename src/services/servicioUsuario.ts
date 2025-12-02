@@ -26,17 +26,18 @@ export const servicioUsuario = {
    * @param userId - ID del usuario
    * @returns Lista de exchanges del usuario
    */
-  async obtenerExchangesPorUsuario(userId: string): Promise<any[]> {
+  async obtenerExchangesUsuario(userId: string): Promise<any[]> {
     const supabase = getSupabaseClient();
     
     const { data: exchanges, error } = await supabase
       .from('exchanges')
-      .select('exchange')
+      .select('exchange, api_key, api_secret, id') // Añadimos api_key, api_secret y id
       .eq('user_id', userId);
+      
     if (error) {
       throw new Error(`Error al obtener exchanges del usuario: ${error.message}`);
     }
-
+  
     return exchanges || [];
-  },
+  }
 };
