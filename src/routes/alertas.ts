@@ -14,7 +14,8 @@ alertasRouter.get("/:userId", async (req: Request, res: Response) => {
       .from("alertas")
       .select("*")
       .eq("user_id", userId)
-      .order("creado", { ascending: false });
+      .order('estado', { ascending: false })  // Primero por estado (pendiente primero)
+      .order('criptomoneda', { ascending: false });  // Luego por criptomoneda descendente
 
     if (error) {
       console.error("Error obteniendo alertas:", error);
