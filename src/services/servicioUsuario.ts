@@ -20,4 +20,23 @@ export const servicioUsuario = {
       throw new Error(`Error al actualizar último acceso: ${error.message}`);
     }
   },
+
+  /**
+   * Obtiene los exchanges de un usuario específico
+   * @param userId - ID del usuario
+   * @returns Lista de exchanges del usuario
+   */
+  async obtenerExchangesPorUsuario(userId: string): Promise<any[]> {
+    const supabase = getSupabaseClient();
+    
+    const { data: exchanges, error } = await supabase
+      .from('exchanges')
+      .select('exchange')
+      .eq('user_id', userId);
+    if (error) {
+      throw new Error(`Error al obtener exchanges del usuario: ${error.message}`);
+    }
+
+    return exchanges || [];
+  },
 };

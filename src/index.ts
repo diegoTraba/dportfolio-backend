@@ -10,7 +10,8 @@ import dotenv from "dotenv";
 import binanceRoutes from './routes/binance';
 import alertasRoutes from "./routes/alertas";
 import notificacionesRoutes from "./routes/notificaciones"
-import authRoutes from './routes/auth.js';
+import authRoutes from './routes/auth';
+import usuarioRoutes from './routes/usuario'
 
 // Servicios
 import { monitorService } from './services/servicioMonitoreo';
@@ -50,6 +51,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // Registrar rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/usuario', usuarioRoutes);
 app.use('/api/binance', binanceRoutes);
 app.use('/api/alertas', alertasRoutes);
 app.use('/api/notificaciones', authenticateToken, notificacionesRoutes);
