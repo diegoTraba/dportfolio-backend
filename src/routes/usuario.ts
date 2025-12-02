@@ -17,7 +17,7 @@ router.get("/:userId/exchanges", async (req: Request, res: Response) => {
     console.log(`👤 Obteniendo exchanges para usuario ID: ${userId}`);
 
     // Llamar al servicio para obtener los exchanges
-    const exchanges = await servicioUsuario.obtenerExchangesPorUsuario(userId);
+    const exchanges = await servicioUsuario.obtenerExchangesUsuario(userId);
 
     res.json({
       success: true,
