@@ -1,6 +1,8 @@
 import { binanceService } from "./servicioBinance.js";
 import { getSupabaseClient } from "../lib/supabase.js";
 import {webSocketService} from "./servicioWebSocket.js";
+import { decrypt } from "../lib/encriptacion.js";
+import { servicioUsuario } from "./servicioUsuario.js";
 
 export interface DatosPrecio {
   simbolo: string;
@@ -8,9 +10,20 @@ export interface DatosPrecio {
   fechaActualizacion: string;
 }
 
+export interface CompraUsuario {
+  id: number;
+  user_id: string;
+  criptomoneda: string;
+  cantidad: number;
+  precio_compra: number;
+  fecha_compra: string;
+  // Puedes añadir más campos según tu esquema
+}
+
 export class ServicioMonitoreo  {
   private estaMonitoreando: boolean = false;
   private idIntervalo: NodeJS.Timeout | null = null;
+  private monitoreosComprasActivos: Map<string, NodeJS.Timeout> = new Map();
 
   // Obtener precio de un símbolo específico
   async obtenerPrecioSimbolo(simbolo: string): Promise<DatosPrecio> {
@@ -118,7 +131,7 @@ export class ServicioMonitoreo  {
   // Iniciar monitoreo periódico (cada 2 min)
   iniciarMonitoreoPrecios(
     callback: (precios: { [key: string]: DatosPrecio }) => void,
-    intervalMs: number = 120000
+    intervalMs: number = 60000
   ) {
     if (this.estaMonitoreando) {
       console.log("⚠️ El monitoreo ya está activo");
@@ -282,6 +295,315 @@ export class ServicioMonitoreo  {
     } catch (error) {
       console.error("💥 Error verificando alertas:", error);
     }
+  }
+
+  // Monitorear compras de un usuario específico
+  private async monitorearComprasUsuario(userId: string, ultimoAcceso?: number | string): Promise<void> {
+    try {
+      console.log(`\n=== 🔄 MONITOREO DE COMPRAS PARA USUARIO ${userId} ===`);
+      console.log("⏰", new Date().toISOString());
+
+      const supabase = getSupabaseClient();
+
+      // 1. Obtener exchanges del usuario
+      const { data: exchanges, error: exchangesError } = await supabase
+        .from("exchanges")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("is_active", true);
+
+      if (exchangesError) {
+        console.error(`❌ Error obteniendo exchanges para usuario ${userId}:`, exchangesError);
+        return;
+      }
+
+      if (!exchanges || exchanges.length === 0) {
+        console.log(`ℹ️ Usuario ${userId} no tiene exchanges activos configurados`);
+        return;
+      }
+
+      console.log(`📊 Encontrados ${exchanges.length} exchanges activos para el usuario`);
+
+      // 2. Buscar exchange de Binance
+      const binanceExchange = exchanges.find(exchange => 
+        exchange.exchange?.toUpperCase() === "BINANCE"
+      );
+
+      if (!binanceExchange) {
+        console.log(`ℹ️ Usuario ${userId} no tiene exchange de Binance configurado`);
+        return;
+      }
+
+      console.log(`✅ Exchange de Binance encontrado para usuario ${userId}`);
+
+      // 3. Desencriptar credenciales de Binance
+      let credentials;
+      try {
+        // Asumiendo que tienes una función decrypt disponible
+        const decryptedApiKey = decrypt(binanceExchange.api_key);
+        const decryptedApiSecret = decrypt(binanceExchange.api_secret);
+        
+        credentials = {
+          apiKey: decryptedApiKey,
+          apiSecret: decryptedApiSecret,
+        };
+      } catch (decryptError) {
+        console.error(`❌ Error desencriptando credenciales para usuario ${userId}:`, decryptError);
+        return;
+      }
+
+      // 4. Obtener todas las compras del usuario desde Binance usando ultimoAcceso como startTime
+      console.log(`🔄 Obteniendo trades de Binance para usuario ${userId}...`);
+      
+      try {
+        // Convertir ultimoAcceso a timestamp si es string
+        const startTime = typeof ultimoAcceso === 'string' 
+          ? new Date(ultimoAcceso).getTime() 
+          : ultimoAcceso || Date.now() - (24 * 60 * 60 * 1000); // Si no hay ultimoAcceso, usar 24 horas atrás
+        
+        const endTime = Date.now();
+        
+        console.log(`📅 Buscando compras desde: ${new Date(startTime).toISOString()}`);
+        console.log(`📅 Hasta: ${new Date(endTime).toISOString()}`);
+
+        const allBuyTrades = await binanceService.getAllUserTrades(
+          credentials,
+          {
+            startTime,
+            endTime,
+            limit: 1000 // Puedes ajustar este límite
+          }
+        );
+
+        console.log(`📊 Obtenidos ${allBuyTrades.length} trades de Binance para usuario ${userId}`);
+
+        // 5. Procesar y guardar las compras en la base de datos
+        let nuevasCompras = 0;
+        let comprasActualizadas = 0;
+        let huboErrores = false;
+
+        for (const trade of allBuyTrades) {
+          try {
+            // Solo procesar trades de compra (isBuyer = true)
+            if (!trade.isBuyer) {
+              continue;
+            }
+
+            // Verificar si la compra ya existe en la base de datos
+            const { data: compraExistente, error: errorConsulta } = await supabase
+              .from("compras")
+              .select("id")
+              .eq("idOrden", trade.orderId.toString())
+              .eq("simbolo", trade.symbol)
+              .eq("idUsuario", userId)
+              .maybeSingle();
+
+            if (errorConsulta) {
+              console.error(
+                `❌ Error verificando compra ${trade.orderId} - ${trade.symbol}:`,
+                errorConsulta
+              );
+              huboErrores = true;
+              continue;
+            }
+
+            // Preparar datos para insertar/actualizar
+            const datosCompra = {
+              exchange: "Binance",
+              idOrden: trade.orderId.toString(),
+              simbolo: trade.symbol,
+              precio: parseFloat(trade.price),
+              cantidad: parseFloat(trade.qty),
+              total: parseFloat(trade.quoteQty),
+              comision: parseFloat(trade.commission),
+              fechaCompra: new Date(trade.time).toISOString(),
+              vendida: false,
+              idUsuario: userId,
+              fechaActualizacion: new Date().toISOString()
+            };
+
+            if (compraExistente) {
+              // Actualizar compra existente
+              const { error: errorActualizacion } = await supabase
+                .from("compras")
+                .update(datosCompra)
+                .eq("id", compraExistente.id);
+
+              if (errorActualizacion) {
+                console.error(
+                  `❌ Error actualizando compra ${trade.orderId} - ${trade.symbol}:`,
+                  errorActualizacion
+                );
+                huboErrores = true;
+              } else {
+                comprasActualizadas++;
+                console.log(`↻ Actualizada: ${trade.symbol} - ${trade.qty} @ $${trade.price}`);
+              }
+            } else {
+              // Insertar nueva compra
+              const { error: errorInsercion } = await supabase
+                .from("compras")
+                .insert([datosCompra]);
+
+              if (errorInsercion) {
+                console.error(
+                  `❌ Error guardando compra ${trade.orderId} - ${trade.symbol}:`,
+                  errorInsercion
+                );
+                huboErrores = true;
+
+                // Si el error es por duplicado, continuar
+                if (errorInsercion.code === "23505") {
+                  continue;
+                }
+              } else {
+                nuevasCompras++;
+                console.log(`✅ Guardada: ${trade.symbol} - ${trade.qty} @ $${trade.price}`);
+              }
+            }
+          } catch (error) {
+            console.error(`💥 Error procesando trade ${trade.orderId}:`, error);
+            huboErrores = true;
+          }
+        }
+
+        // 6. Mostrar resumen
+        console.log(`\n📈 RESUMEN DE SINCRONIZACIÓN PARA ${userId}:`);
+        console.log(`   Total trades obtenidos: ${allBuyTrades.length}`);
+        console.log(`   Nuevas compras guardadas: ${nuevasCompras}`);
+        console.log(`   Compras actualizadas: ${comprasActualizadas}`);
+        console.log(`   Hubo errores: ${huboErrores ? 'Sí' : 'No'}`);
+
+        // 7. Actualizar último acceso si no hubo errores
+        if (!huboErrores) {
+          try {
+            await servicioUsuario.actualizarUltimoAcceso(userId);
+            console.log(`✅ Fecha de último acceso actualizada para usuario ${userId}`);
+            
+            // Notificar al usuario que la sincronización fue exitosa
+            webSocketService.enviarNotificacion(userId, {
+              tipo: "sincronizacion_exitosa",
+              mensaje: `Sincronización completada: ${nuevasCompras} nuevas compras`,
+              nuevasCompras,
+              comprasActualizadas,
+              timestamp: new Date().toISOString()
+            });
+            
+          } catch (updateError) {
+            console.error(`❌ Error actualizando último acceso para usuario ${userId}:`, updateError);
+            // No marcamos como error general porque fue un error de actualización posterior
+          }
+        } else {
+          console.log(`⚠️ No se actualizó el último acceso debido a errores en el proceso`);
+          
+          // Notificar al usuario que hubo errores
+          webSocketService.enviarNotificacion(userId, {
+            tipo: "sincronizacion_con_errores",
+            mensaje: "La sincronización de compras tuvo algunos errores",
+            nuevasCompras,
+            comprasActualizadas,
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        // 8. Notificar al usuario vía WebSocket si hay nuevas compras
+        if (nuevasCompras > 0 && !huboErrores) {
+          const notificacionEnviada = webSocketService.enviarNotificacion(userId, {
+            tipo: "nuevas_compras",
+            mensaje: `Se han encontrado ${nuevasCompras} nuevas compras en tu cuenta de Binance`,
+            nuevasCompras,
+            totalCompras: allBuyTrades.length,
+            timestamp: new Date().toISOString()
+          });
+
+          if (notificacionEnviada) {
+            console.log(`📤 Notificación de nuevas compras enviada al usuario ${userId}`);
+          }
+        }
+
+      } catch (binanceError) {
+        console.error(`❌ Error obteniendo trades de Binance para usuario ${userId}:`, binanceError);
+        
+        // Notificar error al usuario
+        webSocketService.enviarNotificacion(userId, {
+          tipo: "error_sincronizacion",
+          mensaje: "Error al sincronizar compras con Binance",
+          error: binanceError instanceof Error ? binanceError.message : "Error desconocido",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      console.log(`✅ Monitoreo de compras completado para ${userId}\n`);
+    } catch (error) {
+      console.error(`💥 Error en monitoreo de compras para ${userId}:`, error);
+      
+      // Notificar error crítico al usuario
+      webSocketService.enviarNotificacion(userId, {
+        tipo: "error_monitoreo",
+        mensaje: "Error crítico en el monitoreo de compras",
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+   // Iniciar monitoreo periódico de compras para un usuario
+   iniciarMonitoreoCompras(
+    userId: string, 
+    ultimoAcceso: number | string, // Nuevo parámetro: timestamp en ms o string ISO
+    intervaloMs: number = 300000
+  ): void {
+    // Verificar si ya hay un monitoreo activo para este usuario
+    if (this.monitoreosComprasActivos.has(userId)) {
+      console.log(`⚠️ Ya existe un monitoreo de compras activo para el usuario ${userId}`);
+      return;
+    }
+
+    console.log(`🚀 Iniciando monitoreo de compras para usuario ${userId} cada ${intervaloMs / 60000} minutos`);
+    console.log(`📅 Último acceso del usuario: ${new Date(ultimoAcceso).toISOString()}`);
+
+    // Ejecutar inmediatamente, pasando el ultimoAcceso
+    this.monitorearComprasUsuario(userId, ultimoAcceso);
+
+    // Configurar intervalo periódico
+    const intervalo = setInterval(() => {
+      this.monitorearComprasUsuario(userId, ultimoAcceso);
+    }, intervaloMs);
+
+    // Guardar referencia al intervalo
+    this.monitoreosComprasActivos.set(userId, intervalo);
+  }
+  // Detener monitoreo de compras para un usuario específico
+  detenerMonitoreoCompras(userId: string): void {
+    const intervalo = this.monitoreosComprasActivos.get(userId);
+    
+    if (intervalo) {
+      clearInterval(intervalo);
+      this.monitoreosComprasActivos.delete(userId);
+      console.log(`🛑 Monitoreo de compras detenido para usuario ${userId}`);
+    } else {
+      console.log(`⚠️ No hay monitoreo de compras activo para el usuario ${userId}`);
+    }
+  }
+
+  // Detener todos los monitoreos de compras
+  detenerTodosMonitoreosCompras(): void {
+    for (const [userId, intervalo] of this.monitoreosComprasActivos.entries()) {
+      clearInterval(intervalo);
+      console.log(`🛑 Monitoreo detenido para usuario ${userId}`);
+    }
+    
+    this.monitoreosComprasActivos.clear();
+    console.log("✅ Todos los monitoreos de compras han sido detenidos");
+  }
+
+  // Verificar si un usuario tiene monitoreo activo
+  tieneMonitoreoComprasActivo(userId: string): boolean {
+    return this.monitoreosComprasActivos.has(userId);
+  }
+
+  // Obtener lista de usuarios con monitoreo activo
+  obtenerUsuariosConMonitoreoActivo(): string[] {
+    return Array.from(this.monitoreosComprasActivos.keys());
   }
 }
 

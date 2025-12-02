@@ -157,13 +157,14 @@ server.listen(port, () => {
 // Iniciar el monitoreo de precios cuando el servidor arranque
 monitorService.iniciarMonitoreoPrecios((prices) => {
   console.log('Precios actualizados:', prices);
-}, 60000); // Cada 60 segundos
+}, 120000); // Cada 120 segundos
 
 process.on('SIGINT', () => {
   console.log('Recibida señal SIGINT, cerrando servidor...');
   
   // Detener el monitoreo antes de cerrar
   monitorService.detenerMonitoreoPrecios();
+  monitorService.detenerTodosMonitoreosCompras();
   console.log('⏹️ Monitoreo de precios detenido');
   
   server.close(() => {
