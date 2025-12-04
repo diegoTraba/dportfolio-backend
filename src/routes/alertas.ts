@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import { getSupabaseClient } from "../lib/supabase.js";
 import { monitorService } from "../services/servicioMonitoreo.js";
+import { servicioUsuario } from '../services/servicioUsuario';
 
 const alertasRouter = express.Router();
 
@@ -9,20 +10,14 @@ alertasRouter.get("/:userId", async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
 
-    const supabase = getSupabaseClient();
-    const { data: alertas, error } = await supabase
-      .from("alertas")
-      .select("*")
-      .eq("user_id", userId)
-      .order('estado', { ascending: false })  // Primero por estado (pendiente primero)
-      .order('criptomoneda', { ascending: true });  // Luego por criptomoneda descendente
-
-    if (error) {
-      console.error("Error obteniendo alertas:", error);
-      return res.status(500).json({ error: "Error al obtener alertas" });
+    if (!userId) {
+      return res.status(400).json({ error: "Se requiere el ID del usuario" });
     }
 
-    return res.json(alertas || []);
+     // Usar el servicio para obtener las alertas del usuario
+    const alertas = await servicioUsuario.obtenerAlertasUsuario(userId);
+
+    return res.status(200).json(alertas);
   } catch (error) {
     console.error("Error obteniendo alertas:", error);
     return res.status(500).json({ error: "Error al obtener alertas" });
@@ -34,21 +29,15 @@ alertasRouter.get("/detalle/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const supabase = getSupabaseClient();
-    const { data: alerta, error } = await supabase
-      .from("alertas")
-      .select("*")
-      .eq("id", id)
-      .single();
+    // Convertir id a número (ya que en la base de datos es numérico)
+    const alertaId = parseInt(id);
 
-    if (error) {
-      console.error("Error obteniendo alerta:", error);
-      return res.status(500).json({ error: "Error al obtener la alerta" });
+    if (isNaN(alertaId)) {
+      return res.status(400).json({ error: "ID de alerta no válido" });
     }
 
-    if (!alerta) {
-      return res.status(404).json({ error: "Alerta no encontrada" });
-    }
+    // Usar el servicio para obtener la alerta
+    const alerta = await servicioUsuario.obtenerAlerta(alertaId);
 
     return res.json(alerta);
   } catch (error) {
@@ -67,28 +56,17 @@ alertasRouter.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Faltan campos requeridos" });
     }
 
-    const supabase = getSupabaseClient();
-    const { data: alerta, error } = await supabase
-      .from("alertas")
-      .insert([
-        {
-          user_id: userId,
-          criptomoneda,
-          condicion,
-          precio_objetivo: precio_objetivo,
-          precio_actual: precio_actual,
-          estado: 'pendiente',
-          creado: creado
-        }
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return res.status(201).json(alerta);
+      // Usar el servicio para crear la alerta
+      const alerta = await servicioUsuario.crearAlerta({
+        userId,
+        criptomoneda,
+        condicion,
+        precio_objetivo,
+        precio_actual,
+        creado
+      });
+  
+      return res.status(201).json(alerta);
   } catch (error) {
     console.error("Error creando alerta:", error);
     return res.status(500).json({ error: "Error al crear alerta" });
@@ -100,24 +78,25 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const supabase = getSupabaseClient();
-    const { data: alerta, error } = await supabase
-      .from("alertas")
-      .update({ 
-        estado: 'pendiente',
-        activado: null
-      })
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
+    // Convertir id a número
+    const alertaId = parseInt(id);
+    
+    if (isNaN(alertaId)) {
+      return res.status(400).json({ error: "ID de alerta no válido" });
     }
+
+    // Usar el servicio para reactivar la alerta
+    const alerta = await servicioUsuario.reactivarAlerta(alertaId);
 
     return res.json(alerta);
   } catch (error) {
     console.error("Error reactivando alerta:", error);
+    
+    // Personalizar respuesta según el tipo de error
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
     return res.status(500).json({ error: "Error al reactivar alerta" });
   }
 });
@@ -132,26 +111,30 @@ alertasRouter.put("/:id", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Faltan campos requeridos" });
     }
 
-    const supabase = getSupabaseClient();
-    const { data: alerta, error } = await supabase
-      .from("alertas")
-      .update({
-        criptomoneda,
-        condicion,
-        precio_objetivo,
-        precio_actual
-      })
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return res.json(alerta);
+     // Convertir id a número
+     const alertaId = parseInt(id);
+    
+     if (isNaN(alertaId)) {
+       return res.status(400).json({ error: "ID de alerta no válido" });
+     }
+ 
+     // Usar el servicio para actualizar la alerta
+     const alerta = await servicioUsuario.actualizarAlerta(alertaId, {
+       criptomoneda,
+       condicion,
+       precio_objetivo,
+       precio_actual
+     });
+ 
+     return res.json(alerta);
   } catch (error) {
     console.error("Error actualizando alerta:", error);
+    
+    // Personalizar respuesta según el tipo de error
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
     return res.status(500).json({ error: "Error al actualizar alerta" });
   }
 });
@@ -161,19 +144,25 @@ alertasRouter.delete("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from("alertas")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      throw error;
+    // Convertir id a número
+    const alertaId = parseInt(id);
+    
+    if (isNaN(alertaId)) {
+      return res.status(400).json({ error: "ID de alerta no válido" });
     }
+
+    // Usar el servicio para eliminar la alerta
+    await servicioUsuario.eliminarAlerta(alertaId);
 
     return res.status(200).json({ message: "Alerta eliminada correctamente" });
   } catch (error) {
     console.error("Error eliminando alerta:", error);
+    
+    // Personalizar respuesta según el tipo de error
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
     return res.status(500).json({ error: "Error al eliminar alerta" });
   }
 });
