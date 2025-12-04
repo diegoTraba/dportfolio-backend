@@ -56,7 +56,7 @@ export const servicioUsuario = {
       .eq("user_id", userId);
     // Aplicar filtros opcionales si existen
     if (options?.exchange) {
-      consulta = consulta.eq("exchange", options.exchange);
+      consulta = consulta.eq("exchange", options.exchange.toUpperCase());
     }
 
     if (options?.is_active !== undefined) {
