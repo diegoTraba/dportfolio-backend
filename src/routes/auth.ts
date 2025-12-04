@@ -12,7 +12,6 @@ interface Usuario {
   password:string;
   nombre: string;
   ultimoAcceso: string | null;
-  // Agrega otros campos si es necesario, pero para la respuesta del login no queremos la contraseña
 }
 // Middleware para verificar token (reutilizable)
 const verifyToken = (token: string): JwtPayload | null => {

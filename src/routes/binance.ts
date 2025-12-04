@@ -10,6 +10,14 @@ import {
   BinanceCredentials,
   TradeHistoryParams,
 } from "../interfaces/binance.types.js";
+import { servicioUsuario } from "../services/servicioUsuario.js";
+
+interface Exchange {
+  id: number;
+  exchange: string;
+  api_key:string;
+  api_secret: string;
+}
 
 const binanceRouter = express.Router();
 
@@ -100,34 +108,23 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
     }
 
     // Obtener credenciales de Binance del usuario
-    const supabase = getSupabaseClient();
-    const { data: exchange, error } = await supabase
-      .from("exchanges")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("exchange", "BINANCE")
-      .eq("is_active", true)
-      .single();
+    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(userId, {
+      exchange: "binance",
+      is_active: true
+    });
 
-    if (error) {
-      console.error("❌ Error en consulta Supabase:", {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
-      return res
-        .status(500)
-        .json({ error: "Error al consultar la base de datos" });
-    }
-    if (!exchange) {
+    // Verificar si hay exchanges
+    if (!exchanges || exchanges.length === 0) {
       return res.json({
         totalBalance: 0,
         connected: false,
         exchangesCount: 0,
+        message: "No se encontraron exchanges de Binance activos para este usuario"
       });
     }
 
+    // Tomar el primer exchange del array
+    const exchange = exchanges[0];
     // Desencriptar credenciales
     const decryptedApiKey = decrypt(exchange.api_key);
     const decryptedApiSecret = decrypt(exchange.api_secret);
@@ -138,13 +135,7 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
       apiSecret: decryptedApiSecret,
     };
     const totalUSD = await binanceService.getTotalUSDBalance(credentials);
-
-    // Contar exchanges conectados
-    const { data: exchanges, count: exchangesCount } = await supabase
-      .from("exchanges")
-      .select("*", { count: "exact" })
-      .eq("user_id", userId)
-      .eq("is_active", true);
+    const exchangesCount= await servicioUsuario.contarExchangesUsuario(userId);
 
     return res.json({
       totalUSD,
@@ -192,21 +183,23 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
     }
 
     // Obtener credenciales de Binance del usuario
-    const supabase = getSupabaseClient();
-    const { data: exchange, error } = await supabase
-      .from("exchanges")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("exchange", "BINANCE")
-      .eq("is_active", true)
-      .single();
+    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(userId, {
+      exchange: "binance",
+      is_active: true
+    });
 
-    if (error || !exchange) {
-      console.error("❌ Error obteniendo exchange:", error);
-      return res.status(404).json({
-        error: "No se encontró conexión activa de Binance para este usuario",
+    // Verificar si hay exchanges
+    if (!exchanges || exchanges.length === 0) {
+      return res.json({
+        totalBalance: 0,
+        connected: false,
+        exchangesCount: 0,
+        message: "No se encontraron exchanges de Binance activos para este usuario"
       });
     }
+
+    // Tomar el primer exchange del array
+    const exchange = exchanges[0];
 
     // Desencriptar credenciales
     const decryptedApiKey = decrypt(exchange.api_key);
@@ -296,21 +289,23 @@ binanceRouter.get(
       }
 
       // Obtener credenciales de Binance del usuario
-      const supabase = getSupabaseClient();
-      const { data: exchange, error } = await supabase
-        .from("exchanges")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("exchange", "BINANCE")
-        .eq("is_active", true)
-        .single();
+    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(userId, {
+      exchange: "binance",
+      is_active: true
+    });
 
-      if (error || !exchange) {
-        console.error("❌ Error obteniendo exchange:", error);
-        return res.status(404).json({
-          error: "No se encontró conexión activa de Binance para este usuario",
-        });
-      }
+    // Verificar si hay exchanges
+    if (!exchanges || exchanges.length === 0) {
+      return res.json({
+        totalBalance: 0,
+        connected: false,
+        exchangesCount: 0,
+        message: "No se encontraron exchanges de Binance activos para este usuario"
+      });
+    }
+
+    // Tomar el primer exchange del array
+    const exchange = exchanges[0];
 
       // Desencriptar credenciales
       const decryptedApiKey = decrypt(exchange.api_key);
@@ -342,6 +337,7 @@ binanceRouter.get(
 
       for (const trade of allBuyTrades) {
         try {
+          const supabase = getSupabaseClient();
           // Verificar si la compra ya existe en la base de datos
           const { data: compraExistente, error: errorConsulta } = await supabase
             .from("compras")

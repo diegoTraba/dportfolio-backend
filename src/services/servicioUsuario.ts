@@ -4,10 +4,16 @@ import { getSupabaseClient } from "../lib/supabase";
 interface Usuario {
   id: number;
   email: string;
-  password:string;
+  password: string;
   nombre: string;
   ultimoAcceso: string | null;
   // Agrega otros campos si es necesario, pero para la respuesta del login no queremos la contraseña
+}
+interface Exchange {
+  id: number;
+  exchange: string;
+  api_key: string;
+  api_secret: string;
 }
 
 export const servicioUsuario = {
@@ -35,13 +41,29 @@ export const servicioUsuario = {
    * @param userId - ID del usuario
    * @returns Lista de exchanges del usuario
    */
-  async obtenerExchangesUsuario(userId: string): Promise<any[]> {
+  async obtenerExchangesUsuario(
+    userId: string,
+    options?: {
+      exchange?: string;
+      is_active?: boolean;
+    }
+  ): Promise<Exchange[]> {
     const supabase = getSupabaseClient();
 
-    const { data: exchanges, error } = await supabase
+    let consulta = supabase
       .from("exchanges")
-      .select("exchange, api_key, api_secret, id") // Añadimos api_key, api_secret y id
+      .select("id,exchange, api_key, api_secret") // Añadimos api_key, api_secret y id
       .eq("user_id", userId);
+    // Aplicar filtros opcionales si existen
+    if (options?.exchange) {
+      consulta = consulta.eq("exchange", options.exchange);
+    }
+
+    if (options?.is_active !== undefined) {
+      consulta = consulta.eq("is_active", options.is_active);
+    }
+    // Ejecutar la consulta
+    const { data: exchanges, error } = await consulta;
 
     if (error) {
       throw new Error(
@@ -52,7 +74,30 @@ export const servicioUsuario = {
     return exchanges || [];
   },
 
-   /**
+  /**
+   * Cuenta el número total de exchanges de un usuario
+   * @param userId - ID del usuario
+   * @returns Número total de exchanges del usuario
+   */
+  async contarExchangesUsuario(userId: string): Promise<number> {
+    const supabase = getSupabaseClient();
+
+    const { count, error } = await supabase
+      .from("exchanges")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active",true);
+
+    if (error) {
+      throw new Error(
+        `Error al contar exchanges del usuario: ${error.message}`
+      );
+    }
+
+    return count || 0;
+  },
+
+  /**
    * Obtiene el precio de una criptomoneda por símbolo
    * @param symbol - simbolo de la criptomoneda
    * @returns Objeto precioCriptomoneda con el precio de la criptomoneda consultada
@@ -68,7 +113,8 @@ export const servicioUsuario = {
         .single(); // Usamos .single() para obtener un solo registro
 
       if (error) {
-        if (error.code === 'PGRST116') { // Código de error cuando no se encuentra registro
+        if (error.code === "PGRST116") {
+          // Código de error cuando no se encuentra registro
           throw new Error(`No se encontró precio para el símbolo ${symbol}`);
         }
         throw new Error(`Error al obtener precio: ${error.message}`);
@@ -131,5 +177,5 @@ export const servicioUsuario = {
       console.error("Error en obtenerTodosPreciosCriptomonedas:", error);
       throw error;
     }
-  }
+  },
 };
