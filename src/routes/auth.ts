@@ -3,9 +3,17 @@ import { Router, Request, Response } from 'express';
 import { getSupabaseClient } from '../lib/supabase';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { servicioUsuario } from '../services/servicioUsuario';
 
 const router = Router();
-
+interface Usuario {
+  id: number;
+  email: string;
+  password:string;
+  nombre: string;
+  ultimoAcceso: string | null;
+  // Agrega otros campos si es necesario, pero para la respuesta del login no queremos la contraseña
+}
 // Middleware para verificar token (reutilizable)
 const verifyToken = (token: string): JwtPayload | null => {
   try {
@@ -27,24 +35,10 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email y contraseña son requeridos' });
     }
 
-    const supabase = getSupabaseClient();
-    // Buscar el usuario por email
-    const { data: user, error } = await supabase
-      .from('usuarios')
-      .select('*')
-      .eq('email', email)
-      .single();
-
-      // Manejo el error si no se encuentra el usuario
-    if (error || !user) {
-      console.log('❌ User not found:', email);
-      return res.status(401).json({ error: 'Credenciales inválidas' });
-    }
-
-    console.log(`🔍 User found: ${user.email}`);
-
+    const usuario : Usuario= await servicioUsuario.obtenerUsuarioEmail(email);
+    
     // Verificar la contraseña
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(password, usuario.password);
     console.log(`✅ Password valid: ${isPasswordValid}`);
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -53,8 +47,8 @@ router.post('/login', async (req: Request, res: Response) => {
     // Generar el token JWT
     const token = jwt.sign(
       { 
-        id: user.id, 
-        email: user.email 
+        id: usuario.id, 
+        email: usuario.email 
       },
       process.env.JWT_SECRET_KEY!,
       { expiresIn: '2h' } // Token expira en 2 horas
@@ -64,10 +58,10 @@ router.post('/login', async (req: Request, res: Response) => {
     res.json({
       token,
       usuario: {
-        id: user.id,
-        email: user.email,
-        nombre: user.nombre,
-        ultimoAcceso: user.ultimoAcceso
+        id: usuario.id,
+        email: usuario.email,
+        nombre: usuario.nombre,
+        ultimoAcceso: usuario.ultimoAcceso
       }
     });
   } catch (error) {

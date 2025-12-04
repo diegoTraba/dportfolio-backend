@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import { getSupabaseClient } from "../lib/supabase.js";
 import { monitorService } from "../services/servicioMonitoreo.js";
 import { servicioUsuario } from "../services/servicioUsuario";
+import { servicioAlertas } from "../services/servicioAlertas";
 
 const alertasRouter = express.Router();
 
@@ -15,7 +16,7 @@ alertasRouter.get("/:userId", async (req: Request, res: Response) => {
     }
 
     // Usar el servicio para obtener las alertas del usuario
-    const alertas = await servicioUsuario.obtenerAlertasUsuario(userId);
+    const alertas = await servicioAlertas.obtenerAlertasUsuario(userId);
 
     return res.status(200).json(alertas);
   } catch (error) {
@@ -37,7 +38,7 @@ alertasRouter.get("/detalle/:id", async (req: Request, res: Response) => {
     }
 
     // Usar el servicio para obtener la alerta
-    const alerta = await servicioUsuario.obtenerAlerta(alertaId);
+    const alerta = await servicioAlertas.obtenerAlerta(alertaId);
 
     return res.json(alerta);
   } catch (error) {
@@ -87,7 +88,7 @@ alertasRouter.post("/", async (req: Request, res: Response) => {
     }
 
     // Usar el servicio para crear la alerta
-    const alerta = await servicioUsuario.crearAlerta({
+    const alerta = await servicioAlertas.crearAlerta({
       userId,
       criptomoneda,
       condicion,
@@ -116,7 +117,7 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
     }
 
     // Usar el servicio para reactivar la alerta
-    const alerta = await servicioUsuario.reactivarAlerta(alertaId);
+    const alerta = await servicioAlertas.reactivarAlerta(alertaId);
 
     return res.json(alerta);
   } catch (error) {
@@ -150,7 +151,7 @@ alertasRouter.put("/:id", async (req: Request, res: Response) => {
     }
 
     // Usar el servicio para actualizar la alerta
-    const alerta = await servicioUsuario.actualizarAlerta(alertaId, {
+    const alerta = await servicioAlertas.actualizarAlerta(alertaId, {
       criptomoneda,
       condicion,
       precio_objetivo,
@@ -183,7 +184,7 @@ alertasRouter.delete("/:id", async (req: Request, res: Response) => {
     }
 
     // Usar el servicio para eliminar la alerta
-    await servicioUsuario.eliminarAlerta(alertaId);
+    await servicioAlertas.eliminarAlerta(alertaId);
 
     return res.status(200).json({ message: "Alerta eliminada correctamente" });
   } catch (error) {
