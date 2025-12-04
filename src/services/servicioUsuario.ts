@@ -199,4 +199,52 @@ export const servicioUsuario = {
       throw new Error(`Error al eliminar la alerta: ${error.message}`);
     }
   },
+  // Método para obtener el precio de una criptomoneda por símbolo
+  obtenerPrecioCriptomoneda: async (symbol: string): Promise<any> => {
+    try {
+      const supabase = getSupabaseClient();
+
+      const { data, error } = await supabase
+        .from("precioCriptomoneda")
+        .select("*")
+        .eq("simbolo", symbol)
+        .single(); // Usamos .single() para obtener un solo registro
+
+      if (error) {
+        if (error.code === 'PGRST116') { // Código de error cuando no se encuentra registro
+          throw new Error(`No se encontró precio para el símbolo ${symbol}`);
+        }
+        throw new Error(`Error al obtener precio: ${error.message}`);
+      }
+
+      if (!data) {
+        throw new Error(`No se encontró precio para el símbolo ${symbol}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Error en obtenerPrecioCriptomoneda:", error);
+      throw error;
+    }
+  },
+
+  // Opcional: Método para obtener todos los precios si necesitas
+  obtenerTodosPreciosCriptomonedas: async (): Promise<any[]> => {
+    try {
+      const supabase = getSupabaseClient();
+
+      const { data, error } = await supabase
+        .from("precioCriptomoneda")
+        .select("*");
+
+      if (error) {
+        throw new Error(`Error al obtener precios: ${error.message}`);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error("Error en obtenerTodosPreciosCriptomonedas:", error);
+      throw error;
+    }
+  }
 };

@@ -1,7 +1,7 @@
 import express, { Request, Response } from "express";
 import { getSupabaseClient } from "../lib/supabase.js";
 import { monitorService } from "../services/servicioMonitoreo.js";
-import { servicioUsuario } from '../services/servicioUsuario';
+import { servicioUsuario } from "../services/servicioUsuario";
 
 const alertasRouter = express.Router();
 
@@ -14,7 +14,7 @@ alertasRouter.get("/:userId", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Se requiere el ID del usuario" });
     }
 
-     // Usar el servicio para obtener las alertas del usuario
+    // Usar el servicio para obtener las alertas del usuario
     const alertas = await servicioUsuario.obtenerAlertasUsuario(userId);
 
     return res.status(200).json(alertas);
@@ -49,24 +49,54 @@ alertasRouter.get("/detalle/:id", async (req: Request, res: Response) => {
 // Crear nueva alerta
 alertasRouter.post("/", async (req: Request, res: Response) => {
   try {
-    const { userId, criptomoneda, condicion, estado, precio_objetivo, precio_actual, creado } = req.body;
+    const {
+      userId,
+      criptomoneda,
+      condicion,
+      estado,
+      precio_objetivo,
+      precio_actual,
+      creado,
+    } = req.body;
 
-    if (!userId || !criptomoneda || !condicion || !precio_objetivo || !precio_actual || !creado) {
-      console.log("alerta: "+ criptomoneda +"; condicion: "+ condicion +"; user_id: "+userId +"; estado: "+estado+"; precio_actual: "+precio_actual+"; precio_objetivo: "+ precio_objetivo+"; creado: "+creado);
+    if (
+      !userId ||
+      !criptomoneda ||
+      !condicion ||
+      !precio_objetivo ||
+      !precio_actual ||
+      !creado
+    ) {
+      console.log(
+        "alerta: " +
+          criptomoneda +
+          "; condicion: " +
+          condicion +
+          "; user_id: " +
+          userId +
+          "; estado: " +
+          estado +
+          "; precio_actual: " +
+          precio_actual +
+          "; precio_objetivo: " +
+          precio_objetivo +
+          "; creado: " +
+          creado
+      );
       return res.status(400).json({ error: "Faltan campos requeridos" });
     }
 
-      // Usar el servicio para crear la alerta
-      const alerta = await servicioUsuario.crearAlerta({
-        userId,
-        criptomoneda,
-        condicion,
-        precio_objetivo,
-        precio_actual,
-        creado
-      });
-  
-      return res.status(201).json(alerta);
+    // Usar el servicio para crear la alerta
+    const alerta = await servicioUsuario.crearAlerta({
+      userId,
+      criptomoneda,
+      condicion,
+      precio_objetivo,
+      precio_actual,
+      creado,
+    });
+
+    return res.status(201).json(alerta);
   } catch (error) {
     console.error("Error creando alerta:", error);
     return res.status(500).json({ error: "Error al crear alerta" });
@@ -80,7 +110,7 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
 
     // Convertir id a número
     const alertaId = parseInt(id);
-    
+
     if (isNaN(alertaId)) {
       return res.status(400).json({ error: "ID de alerta no válido" });
     }
@@ -91,12 +121,12 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
     return res.json(alerta);
   } catch (error) {
     console.error("Error reactivando alerta:", error);
-    
+
     // Personalizar respuesta según el tipo de error
     if (error instanceof Error) {
       return res.status(500).json({ error: error.message });
     }
-    
+
     return res.status(500).json({ error: "Error al reactivar alerta" });
   }
 });
@@ -105,36 +135,37 @@ alertasRouter.put("/:id/reactivar", async (req: Request, res: Response) => {
 alertasRouter.put("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { criptomoneda, condicion, precio_objetivo, precio_actual } = req.body;
+    const { criptomoneda, condicion, precio_objetivo, precio_actual } =
+      req.body;
 
     if (!criptomoneda || !condicion || !precio_objetivo || !precio_actual) {
       return res.status(400).json({ error: "Faltan campos requeridos" });
     }
 
-     // Convertir id a número
-     const alertaId = parseInt(id);
-    
-     if (isNaN(alertaId)) {
-       return res.status(400).json({ error: "ID de alerta no válido" });
-     }
- 
-     // Usar el servicio para actualizar la alerta
-     const alerta = await servicioUsuario.actualizarAlerta(alertaId, {
-       criptomoneda,
-       condicion,
-       precio_objetivo,
-       precio_actual
-     });
- 
-     return res.json(alerta);
+    // Convertir id a número
+    const alertaId = parseInt(id);
+
+    if (isNaN(alertaId)) {
+      return res.status(400).json({ error: "ID de alerta no válido" });
+    }
+
+    // Usar el servicio para actualizar la alerta
+    const alerta = await servicioUsuario.actualizarAlerta(alertaId, {
+      criptomoneda,
+      condicion,
+      precio_objetivo,
+      precio_actual,
+    });
+
+    return res.json(alerta);
   } catch (error) {
     console.error("Error actualizando alerta:", error);
-    
+
     // Personalizar respuesta según el tipo de error
     if (error instanceof Error) {
       return res.status(500).json({ error: error.message });
     }
-    
+
     return res.status(500).json({ error: "Error al actualizar alerta" });
   }
 });
@@ -146,7 +177,7 @@ alertasRouter.delete("/:id", async (req: Request, res: Response) => {
 
     // Convertir id a número
     const alertaId = parseInt(id);
-    
+
     if (isNaN(alertaId)) {
       return res.status(400).json({ error: "ID de alerta no válido" });
     }
@@ -157,12 +188,12 @@ alertasRouter.delete("/:id", async (req: Request, res: Response) => {
     return res.status(200).json({ message: "Alerta eliminada correctamente" });
   } catch (error) {
     console.error("Error eliminando alerta:", error);
-    
+
     // Personalizar respuesta según el tipo de error
     if (error instanceof Error) {
       return res.status(500).json({ error: error.message });
     }
-    
+
     return res.status(500).json({ error: "Error al eliminar alerta" });
   }
 });
@@ -171,10 +202,32 @@ alertasRouter.delete("/:id", async (req: Request, res: Response) => {
 alertasRouter.get("/price/:symbol", async (req: Request, res: Response) => {
   try {
     const { symbol } = req.params;
-    const priceData = await monitorService.obtenerPrecioSimbolo(symbol);
-    return res.json(priceData);
+
+    // Validar que el símbolo no esté vacío
+    if (!symbol || symbol.trim() === "") {
+      return res
+        .status(400)
+        .json({ error: "Símbolo de criptomoneda no válido" });
+    }
+
+    // Usar el servicio para obtener el precio
+    const precioData = await servicioUsuario.obtenerPrecioCriptomoneda(
+      symbol.toUpperCase()
+    );
+
+    return res.json(precioData);
   } catch (error) {
     console.error("Error obteniendo precio:", error);
+
+    // Personalizar respuesta según el tipo de error
+    if (error instanceof Error) {
+      // Si el error indica que no se encontró el símbolo
+      if (error.message.includes("No se encontró")) {
+        return res.status(404).json({ error: error.message });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+
     return res.status(500).json({ error: "Error al obtener precio" });
   }
 });
