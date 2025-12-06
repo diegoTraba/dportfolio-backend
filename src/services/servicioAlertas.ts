@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "../lib/supabase";
+import {DatosActualizacionAlerta} from "../interfaces/comun.types";
 
 export const servicioAlertas = {
   /**
@@ -44,14 +45,32 @@ export const servicioAlertas = {
    * @param userId - ID del usuario
    * @returns Lista de alertas del usuario
    */
-  async obtenerAlertasUsuario(userId: string): Promise<any[]> {
+  async obtenerAlertasUsuario(
+    userId: string,
+    filtros?: {
+      estado?: string;
+      orderBy?: string;
+      orderDirection?: "asc" | "desc";
+    }
+  ): Promise<any[]> {
     const supabase = getSupabaseClient();
 
-    const { data: alertas, error } = await supabase
-      .from("alertas")
-      .select("*")
-      .eq("user_id", userId)
-      .order("creado", { ascending: false });
+    // Construir la consulta base
+    let query = supabase.from("alertas").select("*").eq("user_id", userId);
+
+    // Aplicar filtro por estado si se proporciona
+    if (filtros?.estado) {
+      query = query.eq("estado", filtros.estado);
+    }
+
+    // Aplicar orden
+    const campoOrden = filtros?.orderBy || "creado";
+    const direccionOrden = filtros?.orderDirection || "desc";
+
+    query = query.order(campoOrden, { ascending: direccionOrden === "asc" });
+
+    // Ejecutar la consulta
+    const { data: alertas, error } = await query;
 
     if (error) {
       throw new Error(`Error al obtener alertas del usuario: ${error.message}`);
@@ -117,34 +136,72 @@ export const servicioAlertas = {
    */
   async actualizarAlerta(
     id: number,
-    datos: {
-      criptomoneda: string;
-      condicion: string;
-      precio_objetivo: number;
-      precio_actual: number;
-    }
+    datos: DatosActualizacionAlerta
   ): Promise<any> {
     const supabase = getSupabaseClient();
-
+  
+    // Validar que el ID sea positivo
+    if (id <= 0) {
+      throw new Error('ID de alerta inválido');
+    }
+  
+    // Preparar objeto de actualización para Supabase
+    const datosParaSupabase: Record<string, any> = {};
+  
+    // Campos directos (sin mapeo)
+    const camposDirectos: (keyof DatosActualizacionAlerta)[] = [
+      'criptomoneda', 'condicion', 'precio_objetivo', 'precio_actual'
+    ];
+  
+    camposDirectos.forEach(campo => {
+      if (datos[campo] !== undefined) {
+        datosParaSupabase[campo] = datos[campo];
+      }
+    });
+  
+    // Campo con mapeo de nombre (leida -> leido)
+    if (datos.leida !== undefined) {
+      datosParaSupabase.leido = datos.leida;
+    }
+  
+    // Validar que haya al menos un campo para actualizar
+    if (Object.keys(datosParaSupabase).length === 0) {
+      throw new Error('No se proporcionaron datos para actualizar la alerta');
+    }
+  
+    // Ejecutar la actualización
     const { data: alerta, error } = await supabase
       .from("alertas")
-      .update({
-        criptomoneda: datos.criptomoneda,
-        condicion: datos.condicion,
-        precio_objetivo: datos.precio_objetivo,
-        precio_actual: datos.precio_actual,
-      })
+      .update(datosParaSupabase)
       .eq("id", id)
       .select()
       .single();
-
+  
     if (error) {
       throw new Error(`Error al actualizar la alerta: ${error.message}`);
     }
-
+  
     return alerta;
   },
+  async marcarAlertasComoLeidas(
+    userId: string
+  ): Promise<{ updatedCount: number }> {
+    const supabase = getSupabaseClient();
 
+      // Crear la consulta base
+      let query = supabase
+      .from("alertas")
+      .update({ leido: true })
+      .eq("leido", false)
+      .eq("user_id",userId);
+      const { data, error, count } = await query.select();
+    
+      if (error) {
+        throw new Error(`Error al marcar alertas como leídas: ${error.message}`);
+      }
+      return { updatedCount: count || 0 };
+  
+  },
   /**
    * Eliminar una alerta
    * @param id - ID de la alerta

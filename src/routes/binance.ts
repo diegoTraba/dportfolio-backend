@@ -410,23 +410,6 @@ binanceRouter.get(
       console.log(
         `Total transacciones obtenidas: ${estadisticas.comprasIdentificadas}`
       );
-      // // Formatear la respuesta
-      // const formattedTrades = allBuyTrades.map(trade => ({
-      //   id: trade.id,
-      //   orderId: trade.orderId,
-      //   symbol: trade.symbol,
-      //   price: parseFloat(trade.price),
-      //   quantity: parseFloat(trade.qty),
-      //   total: parseFloat(trade.quoteQty),
-      //   commission: parseFloat(trade.commission),
-      //   commissionAsset: trade.commissionAsset,
-      //   timestamp: trade.time,
-      //   date: new Date(trade.time).toISOString(),
-      //   isBuyer: trade.isBuyer,
-      //   isMaker: trade.isMaker
-      // }));
-
-      // console.log(`✅ ${formattedTrades.length} compras obtenidas de todos los símbolos`);
 
       return res.json({
         success: true,
@@ -558,22 +541,23 @@ binanceRouter.get(
       if (!userId || userId.trim().length === 0) {
         return res.status(400).json({ error: "El userId es requerido" });
       }
-
-      // Obtener credenciales (misma lógica que el endpoint anterior)
-      const supabase = getSupabaseClient();
-      const { data: exchange, error } = await supabase
-        .from("exchanges")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("exchange", "BINANCE")
-        .eq("is_active", true)
-        .single();
-
-      if (error || !exchange) {
-        return res.status(404).json({
-          error: "No se encontró conexión activa de Binance para este usuario",
+      const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(userId, {
+        exchange: "BINANCE",
+        is_active: true
+      });
+  
+      // Verificar si hay exchanges
+      if (!exchanges || exchanges.length === 0) {
+        return res.json({
+          totalBalance: 0,
+          connected: false,
+          exchangesCount: 0,
+          message: "No se encontraron exchanges de Binance activos para este usuario"
         });
       }
+  
+      // Tomar el primer exchange del array
+      const exchange = exchanges[0];
 
       const decryptedApiKey = decrypt(exchange.api_key);
       const decryptedApiSecret = decrypt(exchange.api_secret);
