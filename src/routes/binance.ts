@@ -15,7 +15,7 @@ import { servicioUsuario } from "../services/servicioUsuario.js";
 interface Exchange {
   id: number;
   exchange: string;
-  api_key:string;
+  api_key: string;
   api_secret: string;
 }
 
@@ -108,10 +108,13 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
     }
 
     // Obtener credenciales de Binance del usuario
-    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(userId, {
-      exchange: "binance",
-      is_active: true
-    });
+    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(
+      userId,
+      {
+        exchange: "binance",
+        is_active: true,
+      }
+    );
 
     // Verificar si hay exchanges
     if (!exchanges || exchanges.length === 0) {
@@ -119,7 +122,8 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
         totalBalance: 0,
         connected: false,
         exchangesCount: 0,
-        message: "No se encontraron exchanges de Binance activos para este usuario"
+        message:
+          "No se encontraron exchanges de Binance activos para este usuario",
       });
     }
 
@@ -135,7 +139,7 @@ binanceRouter.get("/balance/:userId", async (req: Request, res: Response) => {
       apiSecret: decryptedApiSecret,
     };
     const totalUSD = await binanceService.getTotalUSDBalance(credentials);
-    const exchangesCount= await servicioUsuario.contarExchangesUsuario(userId);
+    const exchangesCount = await servicioUsuario.contarExchangesUsuario(userId);
 
     return res.json({
       totalUSD,
@@ -183,10 +187,13 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
     }
 
     // Obtener credenciales de Binance del usuario
-    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(userId, {
-      exchange: "binance",
-      is_active: true
-    });
+    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(
+      userId,
+      {
+        exchange: "binance",
+        is_active: true,
+      }
+    );
 
     // Verificar si hay exchanges
     if (!exchanges || exchanges.length === 0) {
@@ -194,7 +201,8 @@ binanceRouter.get("/trades/:userId", async (req: Request, res: Response) => {
         totalBalance: 0,
         connected: false,
         exchangesCount: 0,
-        message: "No se encontraron exchanges de Binance activos para este usuario"
+        message:
+          "No se encontraron exchanges de Binance activos para este usuario",
       });
     }
 
@@ -289,23 +297,25 @@ binanceRouter.get(
       }
 
       // Obtener credenciales de Binance del usuario
-    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(userId, {
-      exchange: "binance",
-      is_active: true
-    });
+      const exchanges: Exchange[] =
+        await servicioUsuario.obtenerExchangesUsuario(userId, {
+          exchange: "binance",
+          is_active: true,
+        });
 
-    // Verificar si hay exchanges
-    if (!exchanges || exchanges.length === 0) {
-      return res.json({
-        totalBalance: 0,
-        connected: false,
-        exchangesCount: 0,
-        message: "No se encontraron exchanges de Binance activos para este usuario"
-      });
-    }
+      // Verificar si hay exchanges
+      if (!exchanges || exchanges.length === 0) {
+        return res.json({
+          totalBalance: 0,
+          connected: false,
+          exchangesCount: 0,
+          message:
+            "No se encontraron exchanges de Binance activos para este usuario",
+        });
+      }
 
-    // Tomar el primer exchange del array
-    const exchange = exchanges[0];
+      // Tomar el primer exchange del array
+      const exchange = exchanges[0];
 
       // Desencriptar credenciales
       const decryptedApiKey = decrypt(exchange.api_key);
@@ -371,7 +381,7 @@ binanceRouter.get(
             comision: parseFloat(trade.commission),
             fechaCompra: new Date(trade.time).toISOString(),
             vendida: false,
-            idUsuario: userId
+            idUsuario: userId,
           };
 
           // Insertar en la base de datos
@@ -413,7 +423,7 @@ binanceRouter.get(
 
       return res.json({
         success: true,
-        trades: allBuyTrades.length
+        trades: allBuyTrades.length,
       });
     } catch (error) {
       console.error("❌ Error obteniendo todas las compras:", error);
@@ -431,27 +441,50 @@ binanceRouter.get(
   async (req: Request, res: Response) => {
     try {
       const { userId } = req.params;
-      const { 
+      const {
         limit = "500",
         offset = "0",
         simbolo,
+        fechaDesde,
+        fechaHasta,
         orderBy = "fechaCompra",
-        orderDirection = "desc"
+        orderDirection = "desc",
       } = req.query;
 
       console.log("=== 📋 OBTENIENDO COMPRAS ACTIVAS DEL USUARIO ===");
       console.log(`👤 User ID: ${userId}`);
 
+      // Log de filtros de fecha si se proporcionan
+      if (fechaDesde) {
+        console.log(`📅 Fecha desde: ${fechaDesde}`);
+      }
+      if (fechaHasta) {
+        console.log(`📅 Fecha hasta: ${fechaHasta}`);
+      }
+
       if (!userId || userId.trim().length === 0) {
         return res.status(400).json({ error: "El userId es requerido" });
       }
 
+      // Validar formato de fechas si se proporcionan
+      if (fechaDesde && !isValidDateString(fechaDesde as string)) {
+        return res
+          .status(400)
+          .json({ error: "Formato de fechaDesde inválido. Use YYYY-MM-DD" });
+      }
+
+      if (fechaHasta && !isValidDateString(fechaHasta as string)) {
+        return res
+          .status(400)
+          .json({ error: "Formato de fechaHasta inválido. Use YYYY-MM-DD" });
+      }
+
       const supabase = getSupabaseClient();
-      
+
       // Construir la consulta base
       let query = supabase
         .from("compras")
-        .select("*", { count: 'exact' })
+        .select("*", { count: "exact" })
         .eq("idUsuario", userId)
         .eq("vendida", false);
 
@@ -459,6 +492,24 @@ binanceRouter.get(
       if (simbolo && simbolo.toString().trim() !== "") {
         query = query.ilike("simbolo", `%${simbolo.toString().toUpperCase()}%`);
         console.log(`🔍 Filtro por símbolo: ${simbolo}`);
+      }
+
+      // Aplicar filtro por fecha desde si se proporciona
+      if (fechaDesde) {
+        const fechaDesdeObj = new Date(fechaDesde as string);
+        // Establecer hora a 00:00:00 para incluir todo el día
+        fechaDesdeObj.setHours(0, 0, 0, 0);
+        query = query.gte("fechaCompra", fechaDesdeObj.toISOString());
+        console.log(`📅 Filtrando desde: ${fechaDesdeObj.toISOString()}`);
+      }
+
+      // Aplicar filtro por fecha hasta si se proporciona
+      if (fechaHasta) {
+        const fechaHastaObj = new Date(fechaHasta as string);
+        // Establecer hora a 23:59:59 para incluir todo el día
+        fechaHastaObj.setHours(23, 59, 59, 999);
+        query = query.lte("fechaCompra", fechaHastaObj.toISOString());
+        console.log(`📅 Filtrando hasta: ${fechaHastaObj.toISOString()}`);
       }
 
       // Aplicar ordenamiento
@@ -489,7 +540,7 @@ binanceRouter.get(
       const simbolosUnicos = new Set<string>();
 
       if (compras && compras.length > 0) {
-        compras.forEach(compra => {
+        compras.forEach((compra) => {
           valorTotalInvertido += compra.total || 0;
           cantidadTotalCriptos += compra.cantidad || 0;
           simbolosUnicos.add(compra.simbolo);
@@ -501,7 +552,7 @@ binanceRouter.get(
         valorTotalInvertido: parseFloat(valorTotalInvertido.toFixed(2)),
         cantidadTotalCriptos: parseFloat(cantidadTotalCriptos.toFixed(8)),
         cantidadSimbolosDiferentes: simbolosUnicos.size,
-        fechaConsulta: new Date().toISOString()
+        fechaConsulta: new Date().toISOString(),
       };
 
       return res.json({
@@ -511,16 +562,17 @@ binanceRouter.get(
           total: count || 0,
           limite,
           desplazamiento,
-          paginas: Math.ceil((count || 0) / limite)
+          paginas: Math.ceil((count || 0) / limite),
         },
         estadisticas,
         filtros: {
           simbolo: simbolo || null,
+          fechaDesde: fechaDesde || null,
+          fechaHasta: fechaHasta || null,
           orderBy,
-          orderDirection: orden
-        }
+          orderDirection: orden,
+        },
       });
-
     } catch (error) {
       console.error("❌ Error inesperado obteniendo compras activas:", error);
       return res.status(500).json({
@@ -530,6 +582,15 @@ binanceRouter.get(
     }
   }
 );
+
+// Función auxiliar para validar formato de fecha (YYYY-MM-DD)
+function isValidDateString(dateString: string): boolean {
+  const regex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!regex.test(dateString)) return false;
+
+  const date = new Date(dateString);
+  return date instanceof Date && !isNaN(date.getTime());
+}
 
 // Obtener símbolos con actividad del usuario
 binanceRouter.get(
@@ -541,21 +602,23 @@ binanceRouter.get(
       if (!userId || userId.trim().length === 0) {
         return res.status(400).json({ error: "El userId es requerido" });
       }
-      const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(userId, {
-        exchange: "BINANCE",
-        is_active: true
-      });
-  
+      const exchanges: Exchange[] =
+        await servicioUsuario.obtenerExchangesUsuario(userId, {
+          exchange: "BINANCE",
+          is_active: true,
+        });
+
       // Verificar si hay exchanges
       if (!exchanges || exchanges.length === 0) {
         return res.json({
           totalBalance: 0,
           connected: false,
           exchangesCount: 0,
-          message: "No se encontraron exchanges de Binance activos para este usuario"
+          message:
+            "No se encontraron exchanges de Binance activos para este usuario",
         });
       }
-  
+
       // Tomar el primer exchange del array
       const exchange = exchanges[0];
 
