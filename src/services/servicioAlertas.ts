@@ -64,7 +64,8 @@ export const servicioAlertas = {
       query = query.eq("estado", filtros.estado);
     }
 
-    if (filtros?.leido) {
+    // Aplicar filtro por leido si se proporciona (incluso si es false)
+    if (filtros?.leido !== undefined) {
       query = query.eq("leido", filtros.leido);
     }
 
