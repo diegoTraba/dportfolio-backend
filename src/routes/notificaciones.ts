@@ -35,7 +35,7 @@ router.get('/', async (req: Request, res: Response) => {
       titulo: `Alerta de ${alerta.criptomoneda}`,
       mensaje: `${alerta.criptomoneda} ha ${alerta.condicion} $${alerta.precio_objetivo}. Precio actual: $${alerta.precio_actual}`,
       fecha: alerta.activado,
-      leida: alerta.leida,
+      leido: alerta.leido,
       datos_adicionales: {
         criptomoneda: alerta.criptomoneda,
         precio_objetivo: alerta.precio_objetivo,
