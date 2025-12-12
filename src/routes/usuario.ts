@@ -290,6 +290,12 @@ router.get("/obtenerTodosPreciosCriptomonedas", async (req: Request, res: Respon
     // Llamar al servicio para obtener los exchanges
     const precios = await servicioUsuario.obtenerTodosPreciosCriptomonedas();
 
+    console.log("✅ Precios obtenidos:", {
+      cantidad: precios.length,
+      primeros_5: precios.slice(0, 5),
+      simbolos: precios.map(p => p.simbolo)
+    });
+    
     res.json({
       success: true,
       data: precios,
