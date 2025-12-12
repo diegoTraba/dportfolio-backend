@@ -49,6 +49,7 @@ export const servicioAlertas = {
     userId: string,
     filtros?: {
       estado?: string;
+      leido?: boolean;
       orderBy?: string;
       orderDirection?: "asc" | "desc";
     }
@@ -61,6 +62,10 @@ export const servicioAlertas = {
     // Aplicar filtro por estado si se proporciona
     if (filtros?.estado) {
       query = query.eq("estado", filtros.estado);
+    }
+
+    if (filtros?.leido) {
+      query = query.eq("leido", filtros.estado);
     }
 
     // Aplicar orden

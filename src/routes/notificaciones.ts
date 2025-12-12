@@ -23,6 +23,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
     const notificaciones: Alerta[] = await servicioAlertas.obtenerAlertasUsuario(userId, {
       estado: "activo",
+      leido: false,
       orderBy: "activado",
       orderDirection: "desc"
     });
