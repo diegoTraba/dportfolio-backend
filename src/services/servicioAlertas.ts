@@ -65,7 +65,7 @@ export const servicioAlertas = {
     }
 
     if (filtros?.leido) {
-      query = query.eq("leido", filtros.estado);
+      query = query.eq("leido", filtros.leido);
     }
 
     // Aplicar orden
