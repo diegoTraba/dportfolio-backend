@@ -284,4 +284,27 @@ router.post("/actualizarUltimoAcceso", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/obtenerTodosPreciosCriptomonedas", async (req: Request, res: Response) => {
+  try {
+
+    // Llamar al servicio para obtener los exchanges
+    const precios = await servicioUsuario.obtenerTodosPreciosCriptomonedas();
+
+    res.json({
+      success: true,
+      data: precios,
+      message:
+        precios.length > 0
+          ? "precios obtenidos correctamente"
+          : "No se encontraron precios",
+    });
+  } catch (error) {
+    console.error("💥 Error al obtener exchanges:", error);
+    res.status(500).json({
+      error: "Error interno del servidor al obtener exchanges",
+      details: error instanceof Error ? error.message : "Error desconocido",
+    });
+  }
+});
+
 export default router;
