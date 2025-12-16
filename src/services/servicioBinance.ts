@@ -520,7 +520,8 @@ class BinanceService {
   async checkBuyAvailability(
     credentials: BinanceCredentials,
     symbol: string,
-    quantity: number | string
+    quantity: number | string,
+    currentPrice?: number // Parámetro opcional para evitar doble consulta
   ): Promise<{
     canBuy: boolean;
     availableBalance: number;
@@ -535,10 +536,13 @@ class BinanceService {
       const quoteAsset = symbolInfo.quoteAsset; // Ej: USDT, USDC, etc.
       console.log(`💰 Quote Asset: ${quoteAsset}`);
 
-      // Obtener precio actual para calcular el costo estimado
-      const currentPrice = await this.getPrice(symbol);
+      // Usa el precio proporcionado o obtén uno nuevo
+      let price = currentPrice;
+      if (!price) {
+        price = await this.getPrice(symbol);
+      }
       const quantityNum = parseFloat(quantity.toString());
-      const estimatedCost = quantityNum * currentPrice;
+      const estimatedCost = quantityNum * price;
 
       // Obtener balance de la cuenta
       const accountResponse = await this.makeAuthenticatedRequest(

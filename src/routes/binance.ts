@@ -768,11 +768,18 @@ binanceRouter.post("/check-buy", async (req, res) => {
 binanceRouter.post("/user/:userId/buy", async (req, res) => {
   try {
     const { userId } = req.params;
-    const { symbol, quantity, price, type } = req.body;
+    // MODIFICADO: Añadir quoteQuantity
+    const { symbol, quantity, price, type, quoteQuantity } = req.body;
 
     console.log("=== 🛒 COMPRA DESDE USUARIO ===");
     console.log(`👤 User ID: ${userId}`);
-    console.log(`📊 Parámetros:`, { symbol, quantity, price, type });
+    console.log(`📊 Parámetros:`, {
+      symbol,
+      quantity,
+      price,
+      type,
+      quoteQuantity,
+    });
 
     // Validaciones básicas
     if (!userId || userId.trim().length === 0) {
@@ -789,10 +796,12 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
       });
     }
 
-    if (!quantity) {
+    // MODIFICADO: Validar que haya al menos una cantidad
+    if (!quantity && !quoteQuantity) {
       return res.status(400).json({
         success: false,
-        error: "La cantidad es requerida",
+        error:
+          "Se requiere 'quantity' (activo base) o 'quoteQuantity' (moneda de cotización)",
       });
     }
 
@@ -809,7 +818,8 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
     if (!exchanges || exchanges.length === 0) {
       return res.status(400).json({
         success: false,
-        error: "No se encontraron exchanges de Binance activos para este usuario",
+        error:
+          "No se encontraron exchanges de Binance activos para este usuario",
       });
     }
 
@@ -820,18 +830,44 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
     const decryptedApiKey = decrypt(exchange.api_key);
     const decryptedApiSecret = decrypt(exchange.api_secret);
 
-    const credentials = { 
-      apiKey: decryptedApiKey, 
-      apiSecret: decryptedApiSecret 
+    const credentials = {
+      apiKey: decryptedApiKey,
+      apiSecret: decryptedApiSecret,
     };
 
     console.log(`🔐 Credenciales obtenidas para usuario ${userId}`);
 
-    // Verificar disponibilidad
+    // MODIFICADO: Obtener precio actual para cálculos
+    const currentPrice = await binanceService.getPrice(symbol);
+    console.log(`💰 Precio actual de ${symbol}: ${currentPrice}`);
+
+    // MODIFICADO: Calcular cantidad real del activo base y costo estimado
+    let baseQuantity, estimatedCost;
+
+    if (
+      quoteQuantity !== undefined &&
+      quoteQuantity !== null &&
+      quoteQuantity !== ""
+    ) {
+      // El usuario quiere gastar una cantidad fija de la moneda de cotización
+      const quoteQty = parseFloat(quoteQuantity.toString());
+      baseQuantity = quoteQty / currentPrice;
+      estimatedCost = quoteQty; // El costo ya es conocido
+    } else {
+      // Comportamiento original: quantity es la cantidad del activo base
+      baseQuantity = parseFloat(quantity.toString());
+      estimatedCost = baseQuantity * currentPrice;
+    }
+
+    console.log(`📊 Cantidad calculada del activo base: ${baseQuantity}`);
+    console.log(`📊 Costo estimado: ${estimatedCost}`);
+
+    // MODIFICADO: Verificar disponibilidad con cantidad base y precio actual
     const availability = await binanceService.checkBuyAvailability(
       credentials,
       symbol,
-      quantity
+      baseQuantity,
+      currentPrice // Pasar precio para evitar doble cálculo
     );
 
     if (!availability.canBuy) {
@@ -841,14 +877,29 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
       });
     }
 
-    // Realizar la orden de compra
+    // MODIFICADO: Construir parámetros de orden según el tipo
     const orderParams: any = {
       symbol,
-      quantity,
       type: type || "MARKET",
     };
 
-    if (type === "LIMIT" && price) {
+    const isMarketOrder = !type || type === "MARKET";
+    const isLimitOrder = type === "LIMIT";
+
+    // Para órdenes de mercado con quoteQuantity, usar quoteOrderQty
+    if (
+      isMarketOrder &&
+      quoteQuantity !== undefined &&
+      quoteQuantity !== null &&
+      quoteQuantity !== ""
+    ) {
+      orderParams.quoteOrderQty = estimatedCost;
+    } else {
+      // Para órdenes límite o sin quoteQuantity, usar quantity normal
+      orderParams.quantity = baseQuantity;
+    }
+
+    if (isLimitOrder && price) {
       orderParams.price = price;
     }
 
@@ -858,18 +909,26 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
       return res.status(400).json(result);
     }
 
-    // Opcional: Guardar la compra en la base de datos local
+    // MODIFICADO: Guardar compra con cantidad base calculada
     try {
       const supabase = getSupabaseClient();
       const datosCompra = {
         exchange: "Binance",
         idOrden: result.order?.orderId.toString() || "",
         simbolo: symbol,
-        precio: result.order?.fills?.[0]?.price ? parseFloat(result.order.fills[0].price) : 0,
-        cantidad: parseFloat(quantity),
-        total: result.order?.cummulativeQuoteQty ? parseFloat(result.order.cummulativeQuoteQty) : 0,
-        comision: result.order?.fills?.[0]?.commission ? parseFloat(result.order.fills[0].commission) : 0,
-        fechaCompra: result.order?.transactTime ? new Date(result.order.transactTime).toISOString() : new Date().toISOString(),
+        precio: result.order?.fills?.[0]?.price
+          ? parseFloat(result.order.fills[0].price)
+          : currentPrice, // Usar precio actual como fallback
+        cantidad: baseQuantity, // Guardar cantidad base calculada
+        total: result.order?.cummulativeQuoteQty
+          ? parseFloat(result.order.cummulativeQuoteQty)
+          : estimatedCost, // Usar costo estimado como fallback
+        comision: result.order?.fills?.[0]?.commission
+          ? parseFloat(result.order.fills[0].commission)
+          : 0,
+        fechaCompra: result.order?.transactTime
+          ? new Date(result.order.transactTime).toISOString()
+          : new Date().toISOString(),
         vendida: false,
         idUsuario: userId,
       };
@@ -881,7 +940,6 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
 
       if (errorInsercion) {
         console.error("⚠️ Error guardando compra en BD:", errorInsercion);
-        // No fallamos la respuesta, solo logueamos el error
       } else {
         console.log("✅ Compra guardada en base de datos local");
       }
@@ -942,7 +1000,8 @@ binanceRouter.post("/user/:userId/check-buy", async (req, res) => {
     if (!exchanges || exchanges.length === 0) {
       return res.status(400).json({
         success: false,
-        error: "No se encontraron exchanges de Binance activos para este usuario",
+        error:
+          "No se encontraron exchanges de Binance activos para este usuario",
       });
     }
 
@@ -953,9 +1012,9 @@ binanceRouter.post("/user/:userId/check-buy", async (req, res) => {
     const decryptedApiKey = decrypt(exchange.api_key);
     const decryptedApiSecret = decrypt(exchange.api_secret);
 
-    const credentials = { 
-      apiKey: decryptedApiKey, 
-      apiSecret: decryptedApiSecret 
+    const credentials = {
+      apiKey: decryptedApiKey,
+      apiSecret: decryptedApiSecret,
     };
 
     const result = await binanceService.checkBuyAvailability(
@@ -971,15 +1030,18 @@ binanceRouter.post("/user/:userId/check-buy", async (req, res) => {
   } catch (error) {
     console.error("Error en /user/:userId/check-buy:", error);
     // Para desarrollo, envía más detalles
-  const errorResponse = {
-    success: false,
-    error: "Error verificando disponibilidad. Message: "+error.message+"; Stack: "+error.stack,
-  };
-  
-  res.status(500).json(errorResponse);
+    const errorResponse = {
+      success: false,
+      error:
+        "Error verificando disponibilidad. Message: " +
+        error.message +
+        "; Stack: " +
+        error.stack,
+    };
+
+    res.status(500).json(errorResponse);
   }
 });
-
 
 //====================================
 // Ventas
@@ -1131,7 +1193,8 @@ binanceRouter.get("/symbol-info/:symbol", async (req, res) => {
     console.error("Error en /symbol-info:", error);
     res.status(500).json({
       success: false,
-      error: "Error obteniendo información del símbolo. Message: "+ error.message,
+      error:
+        "Error obteniendo información del símbolo. Message: " + error.message,
     });
   }
 });
