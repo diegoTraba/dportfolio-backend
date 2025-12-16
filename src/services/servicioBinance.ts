@@ -802,7 +802,17 @@ async getSymbolInfo(
     );
     
     if (!response.ok) {
-      throw new Error('Error obteniendo información del símbolo');
+      const errorText = await response.text();
+      console.error("❌ Error response from Binance:", errorText);
+      
+      let errorMessage = 'Error obteniendo información del símbolo';
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.msg || errorMessage;
+      } catch (e) {
+        // Si no es JSON, usar el texto plano
+      }
+      throw new Error(`${errorMessage} (HTTP ${response.status})`);
     }
     
     const data = await response.json() as ExchangeInfoResponse;
@@ -1005,69 +1015,75 @@ async getSymbolInfo(
       console.log("\n=== 🔐 MAKE AUTHENTICATED REQUEST ===");
       console.log(`📋 Endpoint: ${endpoint}`);
       console.log(`🔤 Method: ${method}`);
-
-      // Obtener el tiempo del servidor de Binance
-      const binanceTime = await this.getBinanceServerTime();
-      const localTime = Date.now();
-      const timeDiff = binanceTime - localTime;
-
-      console.log(`⏰ Tiempo Binance: ${binanceTime}`);
-
-      const timestamp = binanceTime.toString();
-
-      const params = new URLSearchParams({
-        timestamp,
-        recvWindow: "5000",
-        ...additionalParams,
-      });
-
-      const queryString = params.toString();
-      console.log(`📝 Parámetros: ${queryString}`);
-
-      const signature = await this.generateSignature(
-        queryString,
-        credentials.apiSecret
-      );
-      console.log(`✍️ Signature: ${signature.substring(0, 30)}...`);
-
+      console.log(`📝 Additional Params:`, additionalParams);
+  
+      // Para algunos endpoints como exchangeInfo, Binance no necesita timestamp ni firma
+      // pero si tiene parámetros adicionales como symbol, sí puede necesitarlo
+      const needsAuth = !endpoint.includes('/api/v3/exchangeInfo') || Object.keys(additionalParams).length > 0;
+      
+      let queryString = '';
       let url: string;
-      let options: RequestInit = {
+  
+      if (needsAuth) {
+        // Obtener el tiempo del servidor de Binance
+        const binanceTime = await this.getBinanceServerTime();
+        console.log(`⏰ Tiempo Binance: ${binanceTime}`);
+  
+        const timestamp = binanceTime.toString();
+  
+        const params = new URLSearchParams({
+          timestamp,
+          recvWindow: "5000",
+          ...additionalParams,
+        });
+  
+        queryString = params.toString();
+        console.log(`📝 Query String: ${queryString}`);
+  
+        const signature = await this.generateSignature(
+          queryString,
+          credentials.apiSecret
+        );
+        console.log(`✍️ Signature: ${signature.substring(0, 30)}...`);
+  
+        url = `${this.baseUrl}${endpoint}?${queryString}&signature=${signature}`;
+      } else {
+        // Para exchangeInfo sin parámetros, no necesita autenticación
+        const params = new URLSearchParams(additionalParams);
+        queryString = params.toString();
+        url = `${this.baseUrl}${endpoint}${queryString ? `?${queryString}` : ''}`;
+      }
+  
+      console.log(`🌐 URL final: ${url}`);
+  
+      const options: RequestInit = {
         headers: {
           "X-MBX-APIKEY": credentials.apiKey,
+          "Content-Type": "application/json",
         },
         method: method,
       };
-
-      if (method === "GET") {
-        url = `${this.baseUrl}${endpoint}?${queryString}&signature=${signature}`;
-      } else {
-        // Para POST, la firma va en el body
-        url = `${this.baseUrl}${endpoint}`;
-        params.append("signature", signature);
-        options.body = params.toString();
-        options.headers = {
-          ...options.headers,
-          "Content-Type": "application/x-www-form-urlencoded",
-        };
-      }
-
-      console.log(
-        `🌐 URL: ${method === "GET" ? url : `${this.baseUrl}${endpoint}`}`
-      );
-      if (method === "POST") {
-        console.log(`📦 Body: ${options.body}`);
-      }
-
+  
       console.log("🚀 Enviando request a Binance...");
-
+  
       const startTime = Date.now();
       const response = await fetch(url, options);
       const endTime = Date.now();
-
+  
       console.log(`⏱️ Tiempo de respuesta: ${endTime - startTime}ms`);
       console.log(`📊 Status: ${response.status} ${response.statusText}`);
-
-      return response;
+  
+      // Leer y loguear la respuesta (parcialmente para debugging)
+      const responseText = await response.text();
+      console.log(`📄 Response (primeros 500 chars): ${responseText.substring(0, 500)}`);
+      
+      // Crear una nueva respuesta porque response.text() consume el body
+      return new Response(responseText, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      });
+  
     } catch (error) {
       console.error("💥 ERROR en makeAuthenticatedRequest:", error);
       throw error;

@@ -1131,7 +1131,7 @@ binanceRouter.get("/symbol-info/:symbol", async (req, res) => {
     console.error("Error en /symbol-info:", error);
     res.status(500).json({
       success: false,
-      error: "Error obteniendo información del símbolo",
+      error: "Error obteniendo información del símbolo. Message: "+ error.message,
     });
   }
 });
