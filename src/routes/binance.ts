@@ -909,6 +909,26 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
       return res.status(400).json(result);
     }
 
+    if (result.order.fills && result.order.fills.length > 0) {
+      let comisionTotalUSDC = 0;
+      
+      result.order.fills.forEach((fill, index) => {
+          console.log(`   Transacción ${index + 1}:`);
+          console.log(`     - Comisión: ${fill.commission} ${fill.commissionAsset}`);
+          
+          // Si la comisión es en USDC/USDT, súmala
+          if (fill.commissionAsset === 'USDC' || fill.commissionAsset === 'USDT') {
+              comisionTotalUSDC += parseFloat(fill.commission);
+          }
+          else{
+            console.log(`La comision no esta en usdc`);
+
+          }
+      });
+      
+      console.log(`   Total comisión en USDC: ${comisionTotalUSDC}`);
+  }
+
     // MODIFICADO: Guardar compra con cantidad base calculada
     try {
       const supabase = getSupabaseClient();
@@ -922,7 +942,7 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
         cantidad: baseQuantity, // Guardar cantidad base calculada
         total: result.order?.cummulativeQuoteQty
           ? parseFloat(result.order.cummulativeQuoteQty)
-          : estimatedCost, // Usar costo estimado como fallback
+          : null, // Usar costo estimado como fallback
         comision: result.order?.fills?.[0]?.commission
           ? parseFloat(result.order.fills[0].commission)
           : 0,
