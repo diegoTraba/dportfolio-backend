@@ -59,8 +59,10 @@ router.patch('/:id/leida', async (req: Request, res: Response) => {
     const { id } = req.params;
     
     // Verificar que el ID sea un número válido
-    if (!id || isNaN(parseInt(id))) {
+    if (!id) {
       return res.status(400).json({ error: 'ID de notificación inválido' });
+    } else{
+      console.log("id notificacion: "+ id);
     }
 
     await servicioAlertas.actualizarAlerta(id, {
