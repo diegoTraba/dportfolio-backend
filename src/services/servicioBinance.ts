@@ -22,7 +22,7 @@ import {
   TradeHistoryParams,
   OrderResponse,
   BinanceOrder,
-  ExchangeInfoResponse
+  ExchangeInfoResponse,
 } from "../interfaces/binance.types";
 
 // Lista fija de símbolos a consultar
@@ -377,211 +377,216 @@ class BinanceService {
       return SUPPORTED_SYMBOLS; // Fallback a la lista fija
     }
   }
- // ===========================================================================
+  // ===========================================================================
   // COMPRAS
   // ===========================================================================
 
   /**
- * Realizar una orden de compra en Binance
- */
-async placeBuyOrder(
-  credentials: BinanceCredentials,
-  params: {
-    symbol: string;
-    quantity: number | string;
-    type?: "MARKET" | "LIMIT";
-    price?: number | string;
-    newClientOrderId?: string;
-  }
-): Promise<OrderResponse> {
-  try {
-    console.log("=== 🛍️ INICIANDO ORDEN DE COMPRA ===");
-    console.log("📊 Parámetros de la orden:", params);
-
-    // Validar parámetros básicos
-    if (!params.symbol) {
-      throw new Error("El símbolo es requerido");
+   * Realizar una orden de compra en Binance
+   */
+  async placeBuyOrder(
+    credentials: BinanceCredentials,
+    params: {
+      symbol: string;
+      quantity: number | string;
+      type?: "MARKET" | "LIMIT";
+      price?: number | string;
+      newClientOrderId?: string;
     }
+  ): Promise<OrderResponse> {
+    try {
+      console.log("=== 🛍️ INICIANDO ORDEN DE COMPRA ===");
+      console.log("📊 Parámetros de la orden:", params);
 
-    if (!params.quantity) {
-      throw new Error("La cantidad es requerida");
-    }
-
-    // Preparar parámetros para la orden
-    const orderParams: Record<string, string> = {
-      symbol: params.symbol.toUpperCase(),
-      side: "BUY",
-      type: params.type || "MARKET",
-      quantity: params.quantity.toString(),
-    };
-
-    // Agregar parámetros específicos según el tipo de orden
-    if (params.type === "LIMIT") {
-      if (!params.price) {
-        throw new Error("El precio es requerido para órdenes LIMIT");
+      // Validar parámetros básicos
+      if (!params.symbol) {
+        throw new Error("El símbolo es requerido");
       }
-      orderParams.price = params.price.toString();
-      orderParams.timeInForce = "GTC"; // Good Till Cancelled
-    }
 
-    if (params.newClientOrderId) {
-      orderParams.newClientOrderId = params.newClientOrderId;
-    }
-
-    console.log("📝 Parámetros finales para Binance:", orderParams);
-
-    // Realizar la solicitud a la API de Binance
-    const response = await this.makeAuthenticatedRequest(
-      "/api/v3/order",
-      credentials,
-      orderParams,
-      "POST"
-    );
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-      console.error("❌ Error en la orden de compra:", responseText);
-
-      try {
-        const errorData = JSON.parse(responseText);
-        return {
-          success: false,
-          error: errorData.msg || "Error desconocido",
-          code: errorData.code,
-        };
-      } catch {
-        return {
-          success: false,
-          error: responseText || "Error en la API de Binance",
-        };
+      if (!params.quantity) {
+        throw new Error("La cantidad es requerida");
       }
-    }
 
-    // Parsear respuesta exitosa
-    const orderData = JSON.parse(responseText) as BinanceOrder;
+      // Preparar parámetros para la orden
+      const orderParams: Record<string, string> = {
+        symbol: params.symbol.toUpperCase(),
+        side: "BUY",
+        type: params.type || "MARKET",
+        quantity: params.quantity.toString(),
+      };
 
-    console.log("✅ Orden de compra ejecutada exitosamente");
-    console.log("📋 Detalles de la orden:");
-    console.log(`   ID: ${orderData.orderId}`);
-    console.log(`   Símbolo: ${orderData.symbol}`);
-    console.log(`   Cantidad: ${orderData.origQty}`);
-    console.log(`   Cantidad ejecutada: ${orderData.executedQty}`);
-    console.log(`   Valor total: ${orderData.cummulativeQuoteQty}`);
-    console.log(`   Estado: ${orderData.status}`);
+      // Agregar parámetros específicos según el tipo de orden
+      if (params.type === "LIMIT") {
+        if (!params.price) {
+          throw new Error("El precio es requerido para órdenes LIMIT");
+        }
+        orderParams.price = params.price.toString();
+        orderParams.timeInForce = "GTC"; // Good Till Cancelled
+      }
 
-    // Si hay fills (transacciones individuales), mostrarlas
-    if (orderData.fills && orderData.fills.length > 0) {
-      console.log(`   📦 ${orderData.fills.length} transacción(es):`);
-      orderData.fills.forEach((fill, index) => {
-        console.log(
-          `      ${index + 1}. Precio: ${fill.price}, Cantidad: ${
-            fill.qty
-          }, Comisión: ${fill.commission} ${fill.commissionAsset}`
-        );
-      });
-    }
+      if (params.newClientOrderId) {
+        orderParams.newClientOrderId = params.newClientOrderId;
+      }
 
-    return {
-      success: true,
-      order: orderData,
-    };
-  } catch (error) {
-    console.error("💥 Error en placeBuyOrder:", error);
+      console.log("📝 Parámetros finales para Binance:", orderParams);
 
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Error desconocido al realizar la orden",
-    };
-  }
-}
+      // Realizar la solicitud a la API de Binance
+      const response = await this.makeAuthenticatedRequest(
+        "/api/v3/order",
+        credentials,
+        orderParams,
+        "POST"
+      );
 
-/**
- * Método sobrecargado para órdenes de compra simplificadas
- */
-async buyAsset(
-  credentials: BinanceCredentials,
-  symbol: string,
-  quantity: number | string
-): Promise<OrderResponse> {
-  return this.placeBuyOrder(credentials, { symbol, quantity, type: "MARKET" });
-}
+      const responseText = await response.text();
 
-/**
- * Método para verificar si hay suficiente balance antes de comprar
- */
-async checkBuyAvailability(
-  credentials: BinanceCredentials,
-  symbol: string,
-  quantity: number | string
-): Promise<{
-  canBuy: boolean;
-  availableBalance: number;
-  estimatedCost: number;
-  quoteAsset: string;
-}> {
-  try {
-    console.log("=== 🔍 VERIFICANDO DISPONIBILIDAD PARA COMPRA ===");
+      if (!response.ok) {
+        console.error("❌ Error en la orden de compra:", responseText);
 
-    // Obtener información del símbolo para conocer el quote asset
-    const symbolInfo = await this.getSymbolInfo(credentials, symbol);
-    const quoteAsset = symbolInfo.quoteAsset; // Ej: USDT, USDC, etc.
-    console.log(`💰 Quote Asset: ${quoteAsset}`);
+        try {
+          const errorData = JSON.parse(responseText);
+          return {
+            success: false,
+            error: errorData.msg || "Error desconocido",
+            code: errorData.code,
+          };
+        } catch {
+          return {
+            success: false,
+            error: responseText || "Error en la API de Binance",
+          };
+        }
+      }
 
-    // Obtener precio actual para calcular el costo estimado
-    const currentPrice = await this.getPrice(symbol);
-    const quantityNum = parseFloat(quantity.toString());
-    const estimatedCost = quantityNum * currentPrice;
+      // Parsear respuesta exitosa
+      const orderData = JSON.parse(responseText) as BinanceOrder;
 
-    // Obtener balance de la cuenta
-    const accountResponse = await this.makeAuthenticatedRequest(
-      "/api/v3/account",
-      credentials
-    );
+      console.log("✅ Orden de compra ejecutada exitosamente");
+      console.log("📋 Detalles de la orden:");
+      console.log(`   ID: ${orderData.orderId}`);
+      console.log(`   Símbolo: ${orderData.symbol}`);
+      console.log(`   Cantidad: ${orderData.origQty}`);
+      console.log(`   Cantidad ejecutada: ${orderData.executedQty}`);
+      console.log(`   Valor total: ${orderData.cummulativeQuoteQty}`);
+      console.log(`   Estado: ${orderData.status}`);
 
-    if (!accountResponse.ok) {
-      throw new Error("Error obteniendo balance de cuenta");
-    }
+      // Si hay fills (transacciones individuales), mostrarlas
+      if (orderData.fills && orderData.fills.length > 0) {
+        console.log(`   📦 ${orderData.fills.length} transacción(es):`);
+        orderData.fills.forEach((fill, index) => {
+          console.log(
+            `      ${index + 1}. Precio: ${fill.price}, Cantidad: ${
+              fill.qty
+            }, Comisión: ${fill.commission} ${fill.commissionAsset}`
+          );
+        });
+      }
 
-    const accountData = (await accountResponse.json()) as BinanceAccountResponse;
-
-    // Encontrar el balance del quote asset
-    const assetBalance = accountData.balances.find(
-      (b) => b.asset === quoteAsset
-    );
-
-    if (!assetBalance) {
-      console.log(`❌ No se encontró balance para ${quoteAsset}`);
       return {
-        canBuy: false,
-        availableBalance: 0,
+        success: true,
+        order: orderData,
+      };
+    } catch (error) {
+      console.error("💥 Error en placeBuyOrder:", error);
+
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error desconocido al realizar la orden",
+      };
+    }
+  }
+
+  /**
+   * Método sobrecargado para órdenes de compra simplificadas
+   */
+  async buyAsset(
+    credentials: BinanceCredentials,
+    symbol: string,
+    quantity: number | string
+  ): Promise<OrderResponse> {
+    return this.placeBuyOrder(credentials, {
+      symbol,
+      quantity,
+      type: "MARKET",
+    });
+  }
+
+  /**
+   * Método para verificar si hay suficiente balance antes de comprar
+   */
+  async checkBuyAvailability(
+    credentials: BinanceCredentials,
+    symbol: string,
+    quantity: number | string
+  ): Promise<{
+    canBuy: boolean;
+    availableBalance: number;
+    estimatedCost: number;
+    quoteAsset: string;
+  }> {
+    try {
+      console.log("=== 🔍 VERIFICANDO DISPONIBILIDAD PARA COMPRA ===");
+
+      // Obtener información del símbolo para conocer el quote asset
+      const symbolInfo = await this.getSymbolInfo(credentials, symbol);
+      const quoteAsset = symbolInfo.quoteAsset; // Ej: USDT, USDC, etc.
+      console.log(`💰 Quote Asset: ${quoteAsset}`);
+
+      // Obtener precio actual para calcular el costo estimado
+      const currentPrice = await this.getPrice(symbol);
+      const quantityNum = parseFloat(quantity.toString());
+      const estimatedCost = quantityNum * currentPrice;
+
+      // Obtener balance de la cuenta
+      const accountResponse = await this.makeAuthenticatedRequest(
+        "/api/v3/account",
+        credentials
+      );
+
+      if (!accountResponse.ok) {
+        throw new Error("Error obteniendo balance de cuenta");
+      }
+
+      const accountData =
+        (await accountResponse.json()) as BinanceAccountResponse;
+
+      // Encontrar el balance del quote asset
+      const assetBalance = accountData.balances.find(
+        (b) => b.asset === quoteAsset
+      );
+
+      if (!assetBalance) {
+        console.log(`❌ No se encontró balance para ${quoteAsset}`);
+        return {
+          canBuy: false,
+          availableBalance: 0,
+          estimatedCost,
+          quoteAsset,
+        };
+      }
+
+      const available = parseFloat(assetBalance.free);
+      const canBuy = available >= estimatedCost;
+
+      console.log(`📊 Balance disponible de ${quoteAsset}: ${available}`);
+      console.log(`📊 Costo estimado: ${estimatedCost}`);
+      console.log(`💰 Precio actual de ${symbol}: ${currentPrice}`);
+      console.log(`✅ ¿Puede comprar? ${canBuy ? "Sí" : "No"}`);
+
+      return {
+        canBuy,
+        availableBalance: available,
         estimatedCost,
         quoteAsset,
       };
+    } catch (error) {
+      console.error("Error verificando disponibilidad para compra:", error);
+      throw error;
     }
-
-    const available = parseFloat(assetBalance.free);
-    const canBuy = available >= estimatedCost;
-
-    console.log(`📊 Balance disponible de ${quoteAsset}: ${available}`);
-    console.log(`📊 Costo estimado: ${estimatedCost}`);
-    console.log(`💰 Precio actual de ${symbol}: ${currentPrice}`);
-    console.log(`✅ ¿Puede comprar? ${canBuy ? "Sí" : "No"}`);
-
-    return {
-      canBuy,
-      availableBalance: available,
-      estimatedCost,
-      quoteAsset,
-    };
-  } catch (error) {
-    console.error("Error verificando disponibilidad para compra:", error);
-    throw error;
   }
-}
   // ===========================================================================
   // VENTAS
   // ===========================================================================
@@ -705,158 +710,191 @@ async checkBuyAvailability(
   }
 
   /**
- * Método sobrecargado para órdenes de venta simplificadas
- */
-async sellAsset(
-  credentials: BinanceCredentials,
-  symbol: string,
-  quantity: number | string
-): Promise<OrderResponse> {
-  return this.placeSellOrder(credentials, { symbol, quantity, type: 'MARKET' });
-}
-
-/**
- * Método para verificar si hay suficiente balance antes de vender
- */
-async checkSellAvailability(
-  credentials: BinanceCredentials,
-  symbol: string,
-  quantity: number | string
-): Promise<{ canSell: boolean; availableBalance: number; neededBalance: number; asset: string }> {
-  try {
-    console.log("=== 🔍 VERIFICANDO DISPONIBILIDAD PARA VENTA ===");
-    
-    // Extraer el activo base del símbolo (ej: BTC de BTCUSDT)
-    const baseAsset = symbol.replace(/USDT$|USDC$|BUSD$/, '');
-    console.log(`💰 Activo base: ${baseAsset}`);
-    
-    // Obtener balance de la cuenta
-    const accountResponse = await this.makeAuthenticatedRequest(
-      '/api/v3/account',
-      credentials
-    );
-    
-    if (!accountResponse.ok) {
-      throw new Error('Error obteniendo balance de cuenta');
-    }
-    
-    const accountData = await accountResponse.json() as BinanceAccountResponse;
-    
-    // Encontrar el balance del activo
-    const assetBalance = accountData.balances.find(b => b.asset === baseAsset);
-    
-    if (!assetBalance) {
-      console.log(`❌ No se encontró balance para ${baseAsset}`);
-      return {
-        canSell: false,
-        availableBalance: 0,
-        neededBalance: parseFloat(quantity.toString()),
-        asset: baseAsset
-      };
-    }
-    
-    const available = parseFloat(assetBalance.free);
-    const needed = parseFloat(quantity.toString());
-    const canSell = available >= needed;
-    
-    console.log(`📊 Balance disponible de ${baseAsset}: ${available}`);
-    console.log(`📊 Cantidad necesaria: ${needed}`);
-    console.log(`✅ ¿Puede vender? ${canSell ? 'Sí' : 'No'}`);
-    
-    return {
-      canSell,
-      availableBalance: available,
-      neededBalance: needed,
-      asset: baseAsset
-    };
-    
-  } catch (error) {
-    console.error("Error verificando disponibilidad:", error);
-    throw error;
+   * Método sobrecargado para órdenes de venta simplificadas
+   */
+  async sellAsset(
+    credentials: BinanceCredentials,
+    symbol: string,
+    quantity: number | string
+  ): Promise<OrderResponse> {
+    return this.placeSellOrder(credentials, {
+      symbol,
+      quantity,
+      type: "MARKET",
+    });
   }
-}
 
-/**
- * Método para obtener información del símbolo (precios mínimos, lot size, etc.)
- */
-async getSymbolInfo(
-  credentials: BinanceCredentials,
-  symbol: string
-): Promise<{
-  symbol: string;
-  baseAsset: string;
-  quoteAsset: string;
-  status: string;
-  filters: { [key: string]: any };
-  minQty?: number;
-  stepSize?: number;
-  minNotional?: number;
-}> {
-  try {
-    console.log(`🔍 Obteniendo información del símbolo ${symbol}...`);
-    
-    const response = await this.makeAuthenticatedRequest(
-      '/api/v3/exchangeInfo',
-      credentials,
-      { symbol: symbol.toUpperCase() }
-    );
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ Error response from Binance:", errorText);
-      
-      let errorMessage = 'Error obteniendo información del símbolo';
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.msg || errorMessage;
-      } catch (e) {
-        // Si no es JSON, usar el texto plano
+  /**
+   * Método para verificar si hay suficiente balance antes de vender
+   */
+  async checkSellAvailability(
+    credentials: BinanceCredentials,
+    symbol: string,
+    quantity: number | string
+  ): Promise<{
+    canSell: boolean;
+    availableBalance: number;
+    neededBalance: number;
+    asset: string;
+  }> {
+    try {
+      console.log("=== 🔍 VERIFICANDO DISPONIBILIDAD PARA VENTA ===");
+
+      // Extraer el activo base del símbolo (ej: BTC de BTCUSDT)
+      const baseAsset = symbol.replace(/USDT$|USDC$|BUSD$/, "");
+      console.log(`💰 Activo base: ${baseAsset}`);
+
+      // Obtener balance de la cuenta
+      const accountResponse = await this.makeAuthenticatedRequest(
+        "/api/v3/account",
+        credentials
+      );
+
+      if (!accountResponse.ok) {
+        throw new Error("Error obteniendo balance de cuenta");
       }
-      throw new Error(`${errorMessage} (HTTP ${response.status})`);
+
+      const accountData =
+        (await accountResponse.json()) as BinanceAccountResponse;
+
+      // Encontrar el balance del activo
+      const assetBalance = accountData.balances.find(
+        (b) => b.asset === baseAsset
+      );
+
+      if (!assetBalance) {
+        console.log(`❌ No se encontró balance para ${baseAsset}`);
+        return {
+          canSell: false,
+          availableBalance: 0,
+          neededBalance: parseFloat(quantity.toString()),
+          asset: baseAsset,
+        };
+      }
+
+      const available = parseFloat(assetBalance.free);
+      const needed = parseFloat(quantity.toString());
+      const canSell = available >= needed;
+
+      console.log(`📊 Balance disponible de ${baseAsset}: ${available}`);
+      console.log(`📊 Cantidad necesaria: ${needed}`);
+      console.log(`✅ ¿Puede vender? ${canSell ? "Sí" : "No"}`);
+
+      return {
+        canSell,
+        availableBalance: available,
+        neededBalance: needed,
+        asset: baseAsset,
+      };
+    } catch (error) {
+      console.error("Error verificando disponibilidad:", error);
+      throw error;
     }
-    
-    const data = await response.json() as ExchangeInfoResponse;
-    const symbolInfo = data.symbols?.find((s) => s.symbol === symbol.toUpperCase());
-    
-    if (!symbolInfo) {
-      throw new Error(`Símbolo ${symbol} no encontrado`);
-    }
-    
-    // Extraer filtros importantes
-    const filters = symbolInfo.filters.reduce((acc: any, filter: any) => {
-      acc[filter.filterType] = filter;
-      return acc;
-    }, {});
-    
-    const info = {
-      symbol: symbolInfo.symbol,
-      status: symbolInfo.status,
-      baseAsset: symbolInfo.baseAsset,
-      quoteAsset: symbolInfo.quoteAsset,
-      baseAssetPrecision: symbolInfo.baseAssetPrecision,
-      quotePrecision: symbolInfo.quotePrecision,
-      filters: filters,
-      orderTypes: symbolInfo.orderTypes,
-      icebergAllowed: symbolInfo.icebergAllowed,
-      ocoAllowed: symbolInfo.ocoAllowed,
-      quoteOrderQtyMarketAllowed: symbolInfo.quoteOrderQtyMarketAllowed,
-      isSpotTradingAllowed: symbolInfo.isSpotTradingAllowed,
-      isMarginTradingAllowed: symbolInfo.isMarginTradingAllowed,
-    };
-    
-    console.log("📋 Información del símbolo obtenida");
-    console.log(`   Base Asset: ${info.baseAsset}`);
-    console.log(`   Quote Asset: ${info.quoteAsset}`);
-    console.log(`   Estado: ${info.status}`);
-    console.log(`   LOT_SIZE: Min Qty: ${filters.LOT_SIZE?.minQty || 'N/A'}, Step Size: ${filters.LOT_SIZE?.stepSize || 'N/A'}`);
-    
-    return info;
-    
-  } catch (error) {
-    console.error("Error obteniendo información del símbolo:", error);
-    throw error;
   }
-}
+
+  /**
+   * Método para obtener información del símbolo (precios mínimos, lot size, etc.)
+   */
+  async getSymbolInfo(
+    credentials: BinanceCredentials,
+    symbol: string
+  ): Promise<{
+    symbol: string;
+    baseAsset: string;
+    quoteAsset: string;
+    status: string;
+    filters: { [key: string]: any };
+    minQty?: number;
+    stepSize?: number;
+    minNotional?: number;
+  }> {
+    try {
+      console.log(`🔍 Obteniendo información del símbolo ${symbol}...`);
+
+      const response = await this.makeAuthenticatedRequest(
+        "/api/v3/exchangeInfo",
+        credentials,
+        { symbol: symbol.toUpperCase() }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Error response from Binance:", errorText);
+
+        let errorMessage = "Error obteniendo información del símbolo";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.msg || errorMessage;
+        } catch (e) {
+          // Si no es JSON, usar el texto plano
+        }
+        throw new Error(`${errorMessage} (HTTP ${response.status})`);
+      }
+
+      const data = (await response.json()) as ExchangeInfoResponse;
+      const symbolInfo = data.symbols?.find(
+        (s) => s.symbol === symbol.toUpperCase()
+      );
+
+      if (!symbolInfo) {
+        throw new Error(`Símbolo ${symbol} no encontrado`);
+      }
+
+      // Extraer filtros importantes
+      const filters = symbolInfo.filters.reduce((acc: any, filter: any) => {
+        acc[filter.filterType] = filter;
+        return acc;
+      }, {});
+
+      // Extraer valores específicos de los filtros
+      const lotSizeFilter = filters.LOT_SIZE || {};
+      const minNotionalFilter = filters.MIN_NOTIONAL || filters.NOTIONAL || {};
+
+      // Crear el objeto de retorno con el tipado exacto
+      const result: {
+        symbol: string;
+        baseAsset: string;
+        quoteAsset: string;
+        status: string;
+        filters: { [key: string]: any };
+        minQty?: number;
+        stepSize?: number;
+        minNotional?: number;
+      } = {
+        symbol: symbolInfo.symbol,
+        baseAsset: symbolInfo.baseAsset,
+        quoteAsset: symbolInfo.quoteAsset,
+        status: symbolInfo.status,
+        filters: filters,
+      };
+
+      // Añadir propiedades opcionales si existen
+      if (lotSizeFilter.minQty) {
+        result.minQty = parseFloat(lotSizeFilter.minQty);
+      }
+
+      if (lotSizeFilter.stepSize) {
+        result.stepSize = parseFloat(lotSizeFilter.stepSize);
+      }
+
+      if (minNotionalFilter.minNotional) {
+        result.minNotional = parseFloat(minNotionalFilter.minNotional);
+      }
+
+      console.log("✅ Información del símbolo obtenida correctamente");
+      console.log(`   Símbolo: ${result.symbol}`);
+      console.log(`   Estado: ${result.status}`);
+      console.log(`   Base Asset: ${result.baseAsset}`);
+      console.log(`   Quote Asset: ${result.quoteAsset}`);
+
+      return result;
+    } catch (error: any) {
+      console.error("❌ Error en getSymbolInfo:", error.message);
+      throw new Error(
+        `Error obteniendo información del símbolo ${symbol}: ${error.message}`
+      );
+    }
+  }
   // ===========================================================================
   // MÉTODOS AUXILIARES
   // ===========================================================================
@@ -1012,78 +1050,74 @@ async getSymbolInfo(
     method: "GET" | "POST" = "GET"
   ): Promise<Response> {
     try {
-      console.log("\n=== 🔐 MAKE AUTHENTICATED REQUEST ===");
+      console.log("\n=== 🔐 MAKE REQUEST ===");
       console.log(`📋 Endpoint: ${endpoint}`);
-      console.log(`🔤 Method: ${method}`);
       console.log(`📝 Additional Params:`, additionalParams);
-  
-      // Para algunos endpoints como exchangeInfo, Binance no necesita timestamp ni firma
-      // pero si tiene parámetros adicionales como symbol, sí puede necesitarlo
-      const needsAuth = !endpoint.includes('/api/v3/exchangeInfo') || Object.keys(additionalParams).length > 0;
-      
-      let queryString = '';
+
+      // Determinar si es un endpoint público
+      const isPublicEndpoint = endpoint.includes("/api/v3/exchangeInfo");
+
       let url: string;
-  
-      if (needsAuth) {
-        // Obtener el tiempo del servidor de Binance
+
+      if (isPublicEndpoint) {
+        // Para endpoints públicos, solo añade los parámetros adicionales
+        const params = new URLSearchParams(additionalParams);
+        const queryString = params.toString();
+        url = `${this.baseUrl}${endpoint}${
+          queryString ? `?${queryString}` : ""
+        }`;
+        console.log(`🌐 URL (public endpoint): ${url}`);
+      } else {
+        // Para endpoints privados, usa autenticación completa
         const binanceTime = await this.getBinanceServerTime();
         console.log(`⏰ Tiempo Binance: ${binanceTime}`);
-  
+
         const timestamp = binanceTime.toString();
-  
+
         const params = new URLSearchParams({
           timestamp,
           recvWindow: "5000",
           ...additionalParams,
         });
-  
-        queryString = params.toString();
+
+        const queryString = params.toString();
         console.log(`📝 Query String: ${queryString}`);
-  
+
         const signature = await this.generateSignature(
           queryString,
           credentials.apiSecret
         );
         console.log(`✍️ Signature: ${signature.substring(0, 30)}...`);
-  
+
         url = `${this.baseUrl}${endpoint}?${queryString}&signature=${signature}`;
-      } else {
-        // Para exchangeInfo sin parámetros, no necesita autenticación
-        const params = new URLSearchParams(additionalParams);
-        queryString = params.toString();
-        url = `${this.baseUrl}${endpoint}${queryString ? `?${queryString}` : ''}`;
+        console.log(`🌐 URL (private endpoint): ${url}`);
       }
-  
-      console.log(`🌐 URL final: ${url}`);
-  
+
       const options: RequestInit = {
+        method: method,
         headers: {
-          "X-MBX-APIKEY": credentials.apiKey,
           "Content-Type": "application/json",
         },
-        method: method,
       };
-  
+
+      // Solo añade la API Key si no es un endpoint público
+      if (!isPublicEndpoint) {
+        options.headers = {
+          ...options.headers,
+          "X-MBX-APIKEY": credentials.apiKey,
+        };
+      }
+
       console.log("🚀 Enviando request a Binance...");
-  
+
       const startTime = Date.now();
       const response = await fetch(url, options);
       const endTime = Date.now();
-  
+
       console.log(`⏱️ Tiempo de respuesta: ${endTime - startTime}ms`);
       console.log(`📊 Status: ${response.status} ${response.statusText}`);
-  
-      // Leer y loguear la respuesta (parcialmente para debugging)
-      const responseText = await response.text();
-      console.log(`📄 Response (primeros 500 chars): ${responseText.substring(0, 500)}`);
-      
-      // Crear una nueva respuesta porque response.text() consume el body
-      return new Response(responseText, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers
-      });
-  
+
+      return response;
     } catch (error) {
       console.error("💥 ERROR en makeAuthenticatedRequest:", error);
       throw error;
