@@ -29,7 +29,9 @@ export const SUPPORTED_SYMBOLS = [
 // =============================================================================
 
 class BinanceService {
-  private baseUrl = "https://api.binance.com";
+  // private baseUrl = "https://api.binance.com";
+  //pruebas
+  private baseUrl= "https://testnet.binance.vision"
 
   // ===========================================================================
   // MÉTODOS PÚBLICOS
