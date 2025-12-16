@@ -73,3 +73,83 @@ export interface BinanceCredentials {
     fromId?: number;
     limit?: number;
   }
+
+  // Agrega estas interfaces si no las tienes
+export interface BinanceOrder {
+  symbol: string;
+  orderId: number;
+  orderListId: number;
+  clientOrderId: string;
+  transactTime: number;
+  price: string;
+  origQty: string;
+  executedQty: string;
+  cummulativeQuoteQty: string;
+  status: string;
+  timeInForce: string;
+  type: string;
+  side: string;
+  strategyId?: number;
+  strategyType?: number;
+  workingTime: number;
+  selfTradePreventionMode: string;
+  fills: Array<{
+    price: string;
+    qty: string;
+    commission: string;
+    commissionAsset: string;
+    tradeId: number;
+  }>;
+}
+
+export interface PlaceOrderParams {
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  type: 'MARKET' | 'LIMIT' | 'STOP_LOSS' | 'STOP_LOSS_LIMIT' | 'TAKE_PROFIT' | 'TAKE_PROFIT_LIMIT' | 'LIMIT_MAKER';
+  quantity?: number | string;
+  quoteOrderQty?: number | string;
+  price?: number | string;
+  timeInForce?: 'GTC' | 'IOC' | 'FOK';
+  newClientOrderId?: string;
+  stopPrice?: number | string;
+}
+
+export interface OrderResponse {
+  success: boolean;
+  order?: BinanceOrder;
+  error?: string;
+  code?: number;
+}
+export interface ExchangeInfoResponse {
+  timezone: string;
+  serverTime: number;
+  rateLimits: Array<{
+    rateLimitType: string;
+    interval: string;
+    intervalNum: number;
+    limit: number;
+  }>;
+  exchangeFilters: any[];
+  symbols: Array<{
+    symbol: string;
+    status: string;
+    baseAsset: string;
+    baseAssetPrecision: number;
+    quoteAsset: string;
+    quotePrecision: number;
+    quoteAssetPrecision: number;
+    baseCommissionPrecision: number;
+    quoteCommissionPrecision: number;
+    orderTypes: string[];
+    icebergAllowed: boolean;
+    ocoAllowed: boolean;
+    quoteOrderQtyMarketAllowed: boolean;
+    isSpotTradingAllowed: boolean;
+    isMarginTradingAllowed: boolean;
+    filters: Array<{
+      filterType: string;
+      [key: string]: any;
+    }>;
+    permissions: string[];
+  }>;
+}

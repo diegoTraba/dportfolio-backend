@@ -645,5 +645,492 @@ binanceRouter.get(
     }
   }
 );
+// ====================================
+// Compras
+// ====================================
+
+/**
+ * Ruta para realizar una compra en Binance
+ */
+binanceRouter.post("/buy", async (req, res) => {
+  try {
+    const { apiKey, apiSecret, symbol, quantity, price, type } = req.body;
+
+    // Validaciones básicas
+    if (!apiKey || !apiSecret) {
+      return res.status(400).json({
+        success: false,
+        error: "API Key y Secret son requeridos",
+      });
+    }
+
+    if (!symbol) {
+      return res.status(400).json({
+        success: false,
+        error: "El símbolo es requerido",
+      });
+    }
+
+    if (!quantity) {
+      return res.status(400).json({
+        success: false,
+        error: "La cantidad es requerida",
+      });
+    }
+
+    const credentials = { apiKey, apiSecret };
+
+    // Primero verificar disponibilidad
+    const availability = await binanceService.checkBuyAvailability(
+      credentials,
+      symbol,
+      quantity
+    );
+
+    if (!availability.canBuy) {
+      return res.status(400).json({
+        success: false,
+        error: `Saldo insuficiente. Disponible: ${availability.availableBalance} ${availability.quoteAsset}, Necesario estimado: ${availability.estimatedCost}`,
+      });
+    }
+
+    // Realizar la orden de compra
+    const orderParams: any = {
+      symbol,
+      quantity,
+      type: type || "MARKET",
+    };
+
+    if (type === "LIMIT" && price) {
+      orderParams.price = price;
+    }
+
+    const result = await binanceService.placeBuyOrder(credentials, orderParams);
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      message: "Orden de compra ejecutada exitosamente",
+      order: result.order,
+    });
+  } catch (error) {
+    console.error("Error en /buy:", error);
+    res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Error desconocido al realizar la compra",
+    });
+  }
+});
+
+/**
+ * Ruta para verificar disponibilidad antes de comprar
+ */
+binanceRouter.post("/check-buy", async (req, res) => {
+  try {
+    const { apiKey, apiSecret, symbol, quantity } = req.body;
+
+    if (!apiKey || !apiSecret || !symbol || !quantity) {
+      return res.status(400).json({
+        success: false,
+        error: "Todos los parámetros son requeridos",
+      });
+    }
+
+    const credentials = { apiKey, apiSecret };
+    const result = await binanceService.checkBuyAvailability(
+      credentials,
+      symbol,
+      quantity
+    );
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error("Error en /check-buy:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error verificando disponibilidad",
+    });
+  }
+});
+
+/**
+ * Ruta para compra simplificada con credenciales de usuario
+ */
+binanceRouter.post("/user/:userId/buy", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { symbol, quantity, price, type } = req.body;
+
+    console.log("=== 🛒 COMPRA DESDE USUARIO ===");
+    console.log(`👤 User ID: ${userId}`);
+    console.log(`📊 Parámetros:`, { symbol, quantity, price, type });
+
+    // Validaciones básicas
+    if (!userId || userId.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "El userId es requerido",
+      });
+    }
+
+    if (!symbol) {
+      return res.status(400).json({
+        success: false,
+        error: "El símbolo es requerido",
+      });
+    }
+
+    if (!quantity) {
+      return res.status(400).json({
+        success: false,
+        error: "La cantidad es requerida",
+      });
+    }
+
+    // Obtener credenciales de Binance del usuario
+    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(
+      userId,
+      {
+        exchange: "binance",
+        is_active: true,
+      }
+    );
+
+    // Verificar si hay exchanges
+    if (!exchanges || exchanges.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "No se encontraron exchanges de Binance activos para este usuario",
+      });
+    }
+
+    // Tomar el primer exchange del array
+    const exchange = exchanges[0];
+
+    // Desencriptar credenciales
+    const decryptedApiKey = decrypt(exchange.api_key);
+    const decryptedApiSecret = decrypt(exchange.api_secret);
+
+    const credentials = { 
+      apiKey: decryptedApiKey, 
+      apiSecret: decryptedApiSecret 
+    };
+
+    console.log(`🔐 Credenciales obtenidas para usuario ${userId}`);
+
+    // Verificar disponibilidad
+    const availability = await binanceService.checkBuyAvailability(
+      credentials,
+      symbol,
+      quantity
+    );
+
+    if (!availability.canBuy) {
+      return res.status(400).json({
+        success: false,
+        error: `Saldo insuficiente. Disponible: ${availability.availableBalance} ${availability.quoteAsset}, Necesario estimado: ${availability.estimatedCost}`,
+      });
+    }
+
+    // Realizar la orden de compra
+    const orderParams: any = {
+      symbol,
+      quantity,
+      type: type || "MARKET",
+    };
+
+    if (type === "LIMIT" && price) {
+      orderParams.price = price;
+    }
+
+    const result = await binanceService.placeBuyOrder(credentials, orderParams);
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    // Opcional: Guardar la compra en la base de datos local
+    try {
+      const supabase = getSupabaseClient();
+      const datosCompra = {
+        exchange: "Binance",
+        idOrden: result.order?.orderId.toString() || "",
+        simbolo: symbol,
+        precio: result.order?.fills?.[0]?.price ? parseFloat(result.order.fills[0].price) : 0,
+        cantidad: parseFloat(quantity),
+        total: result.order?.cummulativeQuoteQty ? parseFloat(result.order.cummulativeQuoteQty) : 0,
+        comision: result.order?.fills?.[0]?.commission ? parseFloat(result.order.fills[0].commission) : 0,
+        fechaCompra: result.order?.transactTime ? new Date(result.order.transactTime).toISOString() : new Date().toISOString(),
+        vendida: false,
+        idUsuario: userId,
+      };
+
+      const { data: nuevaCompra, error: errorInsercion } = await supabase
+        .from("compras")
+        .insert([datosCompra])
+        .select();
+
+      if (errorInsercion) {
+        console.error("⚠️ Error guardando compra en BD:", errorInsercion);
+        // No fallamos la respuesta, solo logueamos el error
+      } else {
+        console.log("✅ Compra guardada en base de datos local");
+      }
+    } catch (dbError) {
+      console.error("⚠️ Error en guardado BD:", dbError);
+    }
+
+    res.json({
+      success: true,
+      message: "Orden de compra ejecutada exitosamente",
+      order: result.order,
+      localId: result.order?.orderId,
+    });
+  } catch (error) {
+    console.error("Error en /user/:userId/buy:", error);
+    res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Error desconocido al realizar la compra",
+    });
+  }
+});
+
+/**
+ * Ruta para verificar disponibilidad antes de comprar (con credenciales de usuario)
+ */
+binanceRouter.post("/user/:userId/check-buy", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { symbol, quantity } = req.body;
+
+    if (!userId || userId.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "El userId es requerido",
+      });
+    }
+
+    if (!symbol || !quantity) {
+      return res.status(400).json({
+        success: false,
+        error: "Todos los parámetros son requeridos",
+      });
+    }
+
+    // Obtener credenciales de Binance del usuario
+    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(
+      userId,
+      {
+        exchange: "binance",
+        is_active: true,
+      }
+    );
+
+    // Verificar si hay exchanges
+    if (!exchanges || exchanges.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "No se encontraron exchanges de Binance activos para este usuario",
+      });
+    }
+
+    // Tomar el primer exchange del array
+    const exchange = exchanges[0];
+
+    // Desencriptar credenciales
+    const decryptedApiKey = decrypt(exchange.api_key);
+    const decryptedApiSecret = decrypt(exchange.api_secret);
+
+    const credentials = { 
+      apiKey: decryptedApiKey, 
+      apiSecret: decryptedApiSecret 
+    };
+
+    const result = await binanceService.checkBuyAvailability(
+      credentials,
+      symbol,
+      quantity
+    );
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error("Error en /user/:userId/check-buy:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error verificando disponibilidad",
+    });
+  }
+});
+
+
+//====================================
+// Ventas
+//====================================
+
+/**
+ * Ruta para realizar una venta en Binance
+ */
+binanceRouter.post("/sell", async (req, res) => {
+  try {
+    const { apiKey, apiSecret, symbol, quantity, price, type } = req.body;
+
+    // Validaciones básicas
+    if (!apiKey || !apiSecret) {
+      return res.status(400).json({
+        success: false,
+        error: "API Key y Secret son requeridos",
+      });
+    }
+
+    if (!symbol) {
+      return res.status(400).json({
+        success: false,
+        error: "El símbolo es requerido",
+      });
+    }
+
+    if (!quantity) {
+      return res.status(400).json({
+        success: false,
+        error: "La cantidad es requerida",
+      });
+    }
+
+    const credentials = { apiKey, apiSecret };
+
+    // Primero verificar disponibilidad
+    const availability = await binanceService.checkSellAvailability(
+      credentials,
+      symbol,
+      quantity
+    );
+
+    if (!availability.canSell) {
+      return res.status(400).json({
+        success: false,
+        error: `Saldo insuficiente. Disponible: ${availability.availableBalance} ${availability.asset}, Necesario: ${availability.neededBalance}`,
+      });
+    }
+
+    // Realizar la orden de venta
+    const orderParams: any = {
+      symbol,
+      quantity,
+      type: type || "MARKET",
+    };
+
+    if (type === "LIMIT" && price) {
+      orderParams.price = price;
+    }
+
+    const result = await binanceService.placeSellOrder(
+      credentials,
+      orderParams
+    );
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      message: "Orden de venta ejecutada exitosamente",
+      order: result.order,
+    });
+  } catch (error) {
+    console.error("Error en /sell:", error);
+    res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Error desconocido al realizar la venta",
+    });
+  }
+});
+
+/**
+ * Ruta para verificar disponibilidad antes de vender
+ */
+binanceRouter.post("/check-sell", async (req, res) => {
+  try {
+    const { apiKey, apiSecret, symbol, quantity } = req.body;
+
+    if (!apiKey || !apiSecret || !symbol || !quantity) {
+      return res.status(400).json({
+        success: false,
+        error: "Todos los parámetros son requeridos",
+      });
+    }
+
+    const credentials = { apiKey, apiSecret };
+    const result = await binanceService.checkSellAvailability(
+      credentials,
+      symbol,
+      quantity
+    );
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error("Error en /check-sell:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error verificando disponibilidad",
+    });
+  }
+});
+
+/**
+ * Ruta para obtener información de un símbolo
+ */
+binanceRouter.get("/symbol-info/:symbol", async (req, res) => {
+  try {
+    const { apiKey, apiSecret } = req.query;
+    const { symbol } = req.params;
+
+    if (!apiKey || !apiSecret) {
+      return res.status(400).json({
+        success: false,
+        error: "API Key y Secret son requeridos",
+      });
+    }
+
+    const credentials = {
+      apiKey: apiKey as string,
+      apiSecret: apiSecret as string,
+    };
+
+    const info = await binanceService.getSymbolInfo(credentials, symbol);
+
+    res.json({
+      success: true,
+      info,
+    });
+  } catch (error) {
+    console.error("Error en /symbol-info:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error obteniendo información del símbolo",
+    });
+  }
+});
 
 export default binanceRouter;
