@@ -871,7 +871,7 @@ binanceRouter.post("/user/:userId/buy", async (req, res) => {
           ? parseFloat(result.order.fills[0].commission)
           : 0,
         comisionMoneda: result.order?.fills?.[0]?.commissionAsset
-          ? parseFloat(result.order.fills[0].commissionAsset)
+          ? result.order.fills[0].commissionAsset
           : "",
         fechaCompra: result.order?.transactTime
           ? new Date(result.order.transactTime).toISOString()
