@@ -652,81 +652,81 @@ binanceRouter.get(
 /**
  * Ruta para realizar una compra en Binance
  */
-binanceRouter.post("/buy", async (req, res) => {
-  try {
-    const { apiKey, apiSecret, symbol, quantity, price, type } = req.body;
+// binanceRouter.post("/buy", async (req, res) => {
+//   try {
+//     const { apiKey, apiSecret, symbol, quantity, price, type } = req.body;
 
-    // Validaciones básicas
-    if (!apiKey || !apiSecret) {
-      return res.status(400).json({
-        success: false,
-        error: "API Key y Secret son requeridos",
-      });
-    }
+//     // Validaciones básicas
+//     if (!apiKey || !apiSecret) {
+//       return res.status(400).json({
+//         success: false,
+//         error: "API Key y Secret son requeridos",
+//       });
+//     }
 
-    if (!symbol) {
-      return res.status(400).json({
-        success: false,
-        error: "El símbolo es requerido",
-      });
-    }
+//     if (!symbol) {
+//       return res.status(400).json({
+//         success: false,
+//         error: "El símbolo es requerido",
+//       });
+//     }
 
-    if (!quantity) {
-      return res.status(400).json({
-        success: false,
-        error: "La cantidad es requerida",
-      });
-    }
+//     if (!quantity) {
+//       return res.status(400).json({
+//         success: false,
+//         error: "La cantidad es requerida",
+//       });
+//     }
 
-    const credentials = { apiKey, apiSecret };
+//     const credentials = { apiKey, apiSecret };
 
-    // Primero verificar disponibilidad
-    const availability = await binanceService.checkBuyAvailability(
-      credentials,
-      symbol,
-      quantity
-    );
+//     // Primero verificar disponibilidad
+//     const availability = await binanceService.checkBuyAvailability(
+//       credentials,
+//       symbol,
+//       quantity
+//     );
 
-    if (!availability.canBuy) {
-      return res.status(400).json({
-        success: false,
-        error: `Saldo insuficiente. Disponible: ${availability.availableBalance} ${availability.quoteAsset}, Necesario estimado: ${availability.estimatedCost}`,
-      });
-    }
+//     if (!availability.canBuy) {
+//       return res.status(400).json({
+//         success: false,
+//         error: `Saldo insuficiente. Disponible: ${availability.availableBalance} ${availability.quoteAsset}, Necesario estimado: ${availability.estimatedCost}`,
+//       });
+//     }
 
-    // Realizar la orden de compra
-    const orderParams: any = {
-      symbol,
-      quantity,
-      type: type || "MARKET",
-    };
+//     // Realizar la orden de compra
+//     const orderParams: any = {
+//       symbol,
+//       quantity,
+//       type: type || "MARKET",
+//     };
 
-    if (type === "LIMIT" && price) {
-      orderParams.price = price;
-    }
+//     if (type === "LIMIT" && price) {
+//       orderParams.price = price;
+//     }
 
-    const result = await binanceService.placeBuyOrder(credentials, orderParams);
+//     const result = await binanceService.placeBuyOrder(credentials, orderParams);
 
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
+//     if (!result.success) {
+//       return res.status(400).json(result);
+//     }
 
-    res.json({
-      success: true,
-      message: "Orden de compra ejecutada exitosamente",
-      order: result.order,
-    });
-  } catch (error) {
-    console.error("Error en /buy:", error);
-    res.status(500).json({
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Error desconocido al realizar la compra",
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       message: "Orden de compra ejecutada exitosamente",
+//       order: result.order,
+//     });
+//   } catch (error) {
+//     console.error("Error en /buy:", error);
+//     res.status(500).json({
+//       success: false,
+//       error:
+//         error instanceof Error
+//           ? error.message
+//           : "Error desconocido al realizar la compra",
+//     });
+//   }
+// });
 
 /**
  * Ruta para verificar disponibilidad antes de comprar
