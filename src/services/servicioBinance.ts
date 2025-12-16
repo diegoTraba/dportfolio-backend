@@ -388,33 +388,48 @@ class BinanceService {
     credentials: BinanceCredentials,
     params: {
       symbol: string;
-      quantity: number | string;
+      quantity?: number | string;  // Hacerlo opcional
       type?: "MARKET" | "LIMIT";
       price?: number | string;
       newClientOrderId?: string;
+      quoteOrderQty?: number | string;  // Añadir este parámetro
     }
   ): Promise<OrderResponse> {
     try {
       console.log("=== 🛍️ INICIANDO ORDEN DE COMPRA ===");
       console.log("📊 Parámetros de la orden:", params);
-
+  
       // Validar parámetros básicos
       if (!params.symbol) {
         throw new Error("El símbolo es requerido");
       }
-
-      if (!params.quantity) {
-        throw new Error("La cantidad es requerida");
+  
+      // MODIFICADO: Validación flexible para cantidad
+      if (!params.quantity && !params.quoteOrderQty && params.type !== "LIMIT") {
+        throw new Error("Se requiere quantity o quoteOrderQty para órdenes MARKET");
       }
-
+  
+      // MODIFICADO: Para órdenes LIMIT, quantity sigue siendo obligatorio
+      if (params.type === "LIMIT" && !params.quantity) {
+        throw new Error("La cantidad es requerida para órdenes LIMIT");
+      }
+  
       // Preparar parámetros para la orden
       const orderParams: Record<string, string> = {
         symbol: params.symbol.toUpperCase(),
         side: "BUY",
         type: params.type || "MARKET",
-        quantity: params.quantity.toString(),
       };
-
+  
+      // MODIFICADO: Agregar quantity o quoteOrderQty según corresponda
+      if (params.quantity) {
+        orderParams.quantity = params.quantity.toString();
+      }
+  
+      if (params.quoteOrderQty) {
+        orderParams.quoteOrderQty = params.quoteOrderQty.toString();
+      }
+  
       // Agregar parámetros específicos según el tipo de orden
       if (params.type === "LIMIT") {
         if (!params.price) {
@@ -423,13 +438,13 @@ class BinanceService {
         orderParams.price = params.price.toString();
         orderParams.timeInForce = "GTC"; // Good Till Cancelled
       }
-
+  
       if (params.newClientOrderId) {
         orderParams.newClientOrderId = params.newClientOrderId;
       }
-
+  
       console.log("📝 Parámetros finales para Binance:", orderParams);
-
+  
       // Realizar la solicitud a la API de Binance
       const response = await this.makeAuthenticatedRequest(
         "/api/v3/order",
@@ -437,12 +452,12 @@ class BinanceService {
         orderParams,
         "POST"
       );
-
+  
       const responseText = await response.text();
-
+  
       if (!response.ok) {
         console.error("❌ Error en la orden de compra:", responseText);
-
+  
         try {
           const errorData = JSON.parse(responseText);
           return {
@@ -457,19 +472,26 @@ class BinanceService {
           };
         }
       }
-
+  
       // Parsear respuesta exitosa
       const orderData = JSON.parse(responseText) as BinanceOrder;
-
+  
       console.log("✅ Orden de compra ejecutada exitosamente");
       console.log("📋 Detalles de la orden:");
       console.log(`   ID: ${orderData.orderId}`);
       console.log(`   Símbolo: ${orderData.symbol}`);
-      console.log(`   Cantidad: ${orderData.origQty}`);
+      
+      // MODIFICADO: Manejar diferentes campos según el tipo de orden
+      if (params.quoteOrderQty) {
+        console.log(`   Cantidad gastada (quoteOrderQty): ${params.quoteOrderQty}`);
+      } else {
+        console.log(`   Cantidad (quantity): ${orderData.origQty}`);
+      }
+      
       console.log(`   Cantidad ejecutada: ${orderData.executedQty}`);
       console.log(`   Valor total: ${orderData.cummulativeQuoteQty}`);
       console.log(`   Estado: ${orderData.status}`);
-
+  
       // Si hay fills (transacciones individuales), mostrarlas
       if (orderData.fills && orderData.fills.length > 0) {
         console.log(`   📦 ${orderData.fills.length} transacción(es):`);
@@ -481,14 +503,14 @@ class BinanceService {
           );
         });
       }
-
+  
       return {
         success: true,
         order: orderData,
       };
     } catch (error) {
       console.error("💥 Error en placeBuyOrder:", error);
-
+  
       return {
         success: false,
         error:
