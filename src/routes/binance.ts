@@ -970,10 +970,13 @@ binanceRouter.post("/user/:userId/check-buy", async (req, res) => {
     });
   } catch (error) {
     console.error("Error en /user/:userId/check-buy:", error);
-    res.status(500).json({
-      success: false,
-      error: "Error verificando disponibilidad",
-    });
+    // Para desarrollo, envía más detalles
+  const errorResponse = {
+    success: false,
+    error: "Error verificando disponibilidad. Message: "+error.message+"; Stack: "+error.stack,
+  };
+  
+  res.status(500).json(errorResponse);
   }
 });
 
