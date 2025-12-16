@@ -995,17 +995,37 @@ binanceRouter.post("/user/:userId/check-buy", async (req, res) => {
 //====================================
 
 /**
- * Ruta para realizar una venta en Binance
+ * Ruta para venta simplificada con credenciales de usuario
  */
-binanceRouter.post("/sell", async (req, res) => {
+binanceRouter.post("/user/:userId/sell", async (req, res) => {
   try {
-    const { apiKey, apiSecret, symbol, quantity, price, type } = req.body;
+    const { userId } = req.params;
+    // Parámetros: compraId es obligatorio para asociar la venta
+    const { compraId, symbol, quantity, price, type, quoteQuantity } = req.body;
+
+    console.log("=== 📤 VENTA DESDE USUARIO ===");
+    console.log(`👤 User ID: ${userId}`);
+    console.log(`📊 Parámetros:`, {
+      compraId,
+      symbol,
+      quantity,
+      price,
+      type,
+      quoteQuantity,
+    });
 
     // Validaciones básicas
-    if (!apiKey || !apiSecret) {
+    if (!userId || userId.trim().length === 0) {
       return res.status(400).json({
         success: false,
-        error: "API Key y Secret son requeridos",
+        error: "El userId es requerido",
+      });
+    }
+
+    if (!compraId) {
+      return res.status(400).json({
+        success: false,
+        error: "El compraId es requerido para asociar la venta",
       });
     }
 
@@ -1016,56 +1036,288 @@ binanceRouter.post("/sell", async (req, res) => {
       });
     }
 
-    if (!quantity) {
+    // Validar que haya al menos una cantidad
+    if (!quantity && !quoteQuantity) {
       return res.status(400).json({
         success: false,
-        error: "La cantidad es requerida",
+        error:
+          "Se requiere 'quantity' (activo base) o 'quoteQuantity' (moneda de cotización)",
       });
     }
 
-    const credentials = { apiKey, apiSecret };
+    // Obtener credenciales de Binance del usuario
+    const exchanges: Exchange[] = await servicioUsuario.obtenerExchangesUsuario(
+      userId,
+      {
+        exchange: "binance",
+        is_active: true,
+      }
+    );
 
-    // Primero verificar disponibilidad
+    // Verificar si hay exchanges
+    if (!exchanges || exchanges.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "No se encontraron exchanges de Binance activos para este usuario",
+      });
+    }
+
+    // Obtener la compra asociada desde Supabase
+    const supabase = getSupabaseClient();
+    const { data: compra, error: errorCompra } = await supabase
+      .from("compras")
+      .select("*")
+      .eq("id", compraId)
+      .eq("idUsuario", userId)
+      .single();
+
+    if (errorCompra || !compra) {
+      return res.status(400).json({
+        success: false,
+        error: "Compra no encontrada o no pertenece al usuario",
+      });
+    }
+
+    // Verificar que la compra no esté ya vendida
+    if (compra.vendida) {
+      return res.status(400).json({
+        success: false,
+        error: "Esta compra ya ha sido vendida completamente",
+      });
+    }
+
+    // Calcular cantidad disponible para vender
+    const cantidadDisponible = compra.cantidad_restante || compra.cantidad;
+    
+    // Tomar el primer exchange del array
+    const exchange = exchanges[0];
+
+    // Desencriptar credenciales
+    const decryptedApiKey = decrypt(exchange.api_key);
+    const decryptedApiSecret = decrypt(exchange.api_secret);
+
+    const credentials = {
+      apiKey: decryptedApiKey,
+      apiSecret: decryptedApiSecret,
+    };
+
+    console.log(`🔐 Credenciales obtenidas para usuario ${userId}`);
+
+    // Obtener precio actual para cálculos
+    const currentPrice = await binanceService.getPrice(symbol);
+    console.log(`💰 Precio actual de ${symbol}: ${currentPrice}`);
+
+    // Calcular cantidad real a vender
+    let cantidadAVender, estimatedRevenue;
+
+    if (
+      quoteQuantity !== undefined &&
+      quoteQuantity !== null &&
+      quoteQuantity !== ""
+    ) {
+      // El usuario quiere obtener una cantidad fija de la moneda de cotización
+      const quoteQty = parseFloat(quoteQuantity.toString());
+      cantidadAVender = quoteQty / currentPrice;
+      estimatedRevenue = quoteQty;
+    } else {
+      // Comportamiento original: quantity es la cantidad del activo base
+      cantidadAVender = parseFloat(quantity.toString());
+      estimatedRevenue = cantidadAVender * currentPrice;
+    }
+
+    // Verificar que no se intente vender más de lo disponible
+    if (cantidadAVender > cantidadDisponible) {
+      return res.status(400).json({
+        success: false,
+        error: `Cantidad insuficiente. Disponible: ${cantidadDisponible}, Intenta vender: ${cantidadAVender}`,
+        disponible: cantidadDisponible,
+        intentaVender: cantidadAVender,
+      });
+    }
+
+    console.log(`📊 Cantidad a vender: ${cantidadAVender}`);
+    console.log(`📊 Ingreso estimado: ${estimatedRevenue}`);
+
+    // Verificar disponibilidad para vender (balance en Binance)
     const availability = await binanceService.checkSellAvailability(
       credentials,
       symbol,
-      quantity
+      cantidadAVender,
+      currentPrice
     );
 
     if (!availability.canSell) {
       return res.status(400).json({
         success: false,
-        error: `Saldo insuficiente. Disponible: ${availability.availableBalance} ${availability.asset}, Necesario: ${availability.neededBalance}`,
+        error: `Saldo insuficiente en Binance. Disponible: ${availability.availableBalance} ${availability.baseAsset}`,
       });
     }
 
-    // Realizar la orden de venta
+    // Construir parámetros de orden según el tipo
     const orderParams: any = {
       symbol,
-      quantity,
       type: type || "MARKET",
     };
 
-    if (type === "LIMIT" && price) {
+    const isMarketOrder = !type || type === "MARKET";
+    const isLimitOrder = type === "LIMIT";
+
+    // Para órdenes de mercado con quoteQuantity, usar quoteOrderQty
+    if (
+      isMarketOrder &&
+      quoteQuantity !== undefined &&
+      quoteQuantity !== null &&
+      quoteQuantity !== ""
+    ) {
+      orderParams.quoteOrderQty = estimatedRevenue;
+    } else {
+      // Para órdenes límite o sin quoteQuantity, usar quantity normal
+      orderParams.quantity = cantidadAVender;
+    }
+
+    if (isLimitOrder && price) {
       orderParams.price = price;
     }
 
-    const result = await binanceService.placeSellOrder(
-      credentials,
-      orderParams
-    );
+    // Ejecutar orden de venta
+    const result = await binanceService.placeSellOrder(credentials, orderParams);
 
     if (!result.success) {
       return res.status(400).json(result);
+    }
+
+    // Log de comisiones
+    let comisionTotalVenta = 0;
+    let comisionMonedaVenta = "";
+
+    if (result.order.fills && result.order.fills.length > 0) {
+      result.order.fills.forEach((fill, index) => {
+        console.log(`   Transacción ${index + 1}:`);
+        console.log(
+          `     - Comisión: ${fill.commission} ${fill.commissionAsset}`
+        );
+
+        // Sumar comisiones si son en la moneda de cotización (USDC/USDT)
+        if (
+          fill.commissionAsset === "USDC" ||
+          fill.commissionAsset === "USDT"
+        ) {
+          comisionTotalVenta += parseFloat(fill.commission);
+          comisionMonedaVenta = fill.commissionAsset;
+        } else {
+          console.log(`La comisión no está en USDC/USDT`);
+          // Guardamos la primera moneda de comisión no USDC
+          if (!comisionMonedaVenta) {
+            comisionMonedaVenta = fill.commissionAsset;
+          }
+        }
+      });
+
+      console.log(`   Total comisión en venta: ${comisionTotalVenta} ${comisionMonedaVenta}`);
+    }
+
+    // Calcular precio de venta real (promedio ponderado)
+    let precioVentaReal = currentPrice;
+    if (result.order.fills && result.order.fills.length > 0) {
+      let totalCantidad = 0;
+      let totalValor = 0;
+      
+      result.order.fills.forEach(fill => {
+        const cantidad = parseFloat(fill.qty);
+        const precio = parseFloat(fill.price);
+        totalCantidad += cantidad;
+        totalValor += cantidad * precio;
+      });
+      
+      if (totalCantidad > 0) {
+        precioVentaReal = totalValor / totalCantidad;
+      }
+    }
+
+    // Guardar venta en base de datos y actualizar compra
+    try {
+      const totalVentaReal = result.order?.cummulativeQuoteQty
+        ? parseFloat(result.order.cummulativeQuoteQty)
+        : estimatedRevenue;
+
+      // Calcular beneficio
+      const totalCompra = compra.total || (compra.precio * cantidadAVender);
+      const beneficio = totalVentaReal - totalCompra;
+      const porcentajeBeneficio = (beneficio / totalCompra) * 100;
+
+      // 1. Insertar registro en ventas
+      const datosVenta = {
+        compra_id: compraId,
+        exchange: "Binance",
+        idOrdenVenta: result.order?.orderId.toString() || "",
+        simbolo: symbol,
+        precioVenta: precioVentaReal,
+        cantidadVendida: cantidadAVender,
+        totalVenta: totalVentaReal,
+        comisionVenta: comisionTotalVenta,
+        comisionMonedaVenta: comisionMonedaVenta,
+        beneficio: beneficio,
+        porcentajeBeneficio: porcentajeBeneficio,
+        fechaVenta: result.order?.transactTime
+          ? new Date(result.order.transactTime).toISOString()
+          : new Date().toISOString(),
+      };
+
+      const { data: nuevaVenta, error: errorVenta } = await supabase
+        .from("ventas")
+        .insert([datosVenta])
+        .select();
+
+      if (errorVenta) {
+        console.error("⚠️ Error guardando venta en BD:", errorVenta);
+      } else {
+        console.log("✅ Venta guardada en base de datos");
+      }
+
+      // 2. Actualizar la compra (marcar como vendida o reducir cantidad)
+      const cantidadRestante = cantidadDisponible - cantidadAVender;
+      const estaCompletamenteVendida = cantidadRestante <= 0.000001; // Tolerancia por decimales
+
+      const updateData: any = {
+        cantidad_restante: cantidadRestante,
+        vendida: estaCompletamenteVendida,
+      };
+
+      // Si la cantidad restante es muy pequeña, establecer a 0 y marcar como vendida
+      if (cantidadRestante < 0.000001) {
+        updateData.cantidad_restante = 0;
+        updateData.vendida = true;
+      }
+
+      const { error: errorUpdateCompra } = await supabase
+        .from("compras")
+        .update(updateData)
+        .eq("id", compraId);
+
+      if (errorUpdateCompra) {
+        console.error("⚠️ Error actualizando compra:", errorUpdateCompra);
+      } else {
+        console.log(`✅ Compra actualizada. Vendida: ${updateData.vendida}, Cantidad restante: ${updateData.cantidad_restante}`);
+      }
+
+    } catch (dbError) {
+      console.error("⚠️ Error en guardado BD:", dbError);
     }
 
     res.json({
       success: true,
       message: "Orden de venta ejecutada exitosamente",
       order: result.order,
+      localId: result.order?.orderId,
+      compraActualizada: {
+        compraId,
+        vendida: cantidadAVender >= cantidadDisponible,
+        cantidadRestante: cantidadDisponible - cantidadAVender,
+      },
     });
   } catch (error) {
-    console.error("Error en /sell:", error);
+    console.error("Error en /user/:userId/sell:", error);
     res.status(500).json({
       success: false,
       error:
