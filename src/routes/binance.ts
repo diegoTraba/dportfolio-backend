@@ -1249,7 +1249,7 @@ binanceRouter.post("/user/:userId/sell", async (req, res) => {
 
       // 1. Insertar registro en ventas
       const datosVenta = {
-        compra_id: compraId,
+        idCompra: compraId,
         exchange: "Binance",
         // idOrdenVenta: result.order?.orderId.toString() || "",
         simbolo: symbol,
