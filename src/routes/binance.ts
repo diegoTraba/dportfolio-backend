@@ -1251,15 +1251,14 @@ binanceRouter.post("/user/:userId/sell", async (req, res) => {
       const datosVenta = {
         compra_id: compraId,
         exchange: "Binance",
-        idOrdenVenta: result.order?.orderId.toString() || "",
+        // idOrdenVenta: result.order?.orderId.toString() || "",
         simbolo: symbol,
         precioVenta: precioVentaReal,
         cantidadVendida: cantidadAVender,
-        totalVenta: totalVentaReal,
+        // totalVenta: totalVentaReal,
         comisionVenta: comisionTotalVenta,
-        comisionMonedaVenta: comisionMonedaVenta,
+        comisionMoneda: comisionMonedaVenta,
         beneficio: beneficio,
-        porcentajeBeneficio: porcentajeBeneficio,
         fechaVenta: result.order?.transactTime
           ? new Date(result.order.transactTime).toISOString()
           : new Date().toISOString(),
@@ -1278,16 +1277,15 @@ binanceRouter.post("/user/:userId/sell", async (req, res) => {
 
       // 2. Actualizar la compra (marcar como vendida o reducir cantidad)
       const cantidadRestante = cantidadDisponible - cantidadAVender;
-      const estaCompletamenteVendida = cantidadRestante <= 0.000001; // Tolerancia por decimales
+      const estaCompletamenteVendida = cantidadRestante <= 0.00001; // Tolerancia por decimales
 
       const updateData: any = {
-        cantidad_restante: cantidadRestante,
         vendida: estaCompletamenteVendida,
       };
 
       // Si la cantidad restante es muy pequeña, establecer a 0 y marcar como vendida
-      if (cantidadRestante < 0.000001) {
-        updateData.cantidad_restante = 0;
+      if (cantidadRestante < 0.00001) {
+        updateData.cantidadRestante= 0
         updateData.vendida = true;
       }
 
