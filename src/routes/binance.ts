@@ -1150,7 +1150,7 @@ binanceRouter.post("/user/:userId/sell", async (req, res) => {
     if (!availability.canSell) {
       return res.status(400).json({
         success: false,
-        error: `Saldo insuficiente en Binance. Disponible: ${availability.availableBalance} ${availability.baseAsset}`,
+        error: `Saldo insuficiente en Binance. Disponible: ${availability.availableBalance} ${availability.baseAsset} Razones: ${availability.reasons}`,
       });
     }
 

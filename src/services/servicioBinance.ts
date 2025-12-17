@@ -388,48 +388,54 @@ class BinanceService {
     credentials: BinanceCredentials,
     params: {
       symbol: string;
-      quantity?: number | string;  // Hacerlo opcional
+      quantity?: number | string; // Hacerlo opcional
       type?: "MARKET" | "LIMIT";
       price?: number | string;
       newClientOrderId?: string;
-      quoteOrderQty?: number | string;  // Añadir este parámetro
+      quoteOrderQty?: number | string; // Añadir este parámetro
     }
   ): Promise<OrderResponse> {
     try {
       console.log("=== 🛍️ INICIANDO ORDEN DE COMPRA ===");
       console.log("📊 Parámetros de la orden:", params);
-  
+
       // Validar parámetros básicos
       if (!params.symbol) {
         throw new Error("El símbolo es requerido");
       }
-  
+
       // MODIFICADO: Validación flexible para cantidad
-      if (!params.quantity && !params.quoteOrderQty && params.type !== "LIMIT") {
-        throw new Error("Se requiere quantity o quoteOrderQty para órdenes MARKET");
+      if (
+        !params.quantity &&
+        !params.quoteOrderQty &&
+        params.type !== "LIMIT"
+      ) {
+        throw new Error(
+          "Se requiere quantity o quoteOrderQty para órdenes MARKET"
+        );
       }
-  
+
       // MODIFICADO: Para órdenes LIMIT, quantity sigue siendo obligatorio
       if (params.type === "LIMIT" && !params.quantity) {
         throw new Error("La cantidad es requerida para órdenes LIMIT");
       }
-  
+
       // Preparar parámetros para la orden
       const orderParams: Record<string, string> = {
         symbol: params.symbol.toUpperCase(),
         side: "BUY",
         type: params.type || "MARKET",
       };
-  
+
       // MODIFICADO: Agregar quantity o quoteOrderQty según corresponda
       if (params.quantity) {
         orderParams.quantity = params.quantity.toString();
       }
-  
+
       if (params.quoteOrderQty) {
         orderParams.quoteOrderQty = params.quoteOrderQty.toString();
       }
-  
+
       // Agregar parámetros específicos según el tipo de orden
       if (params.type === "LIMIT") {
         if (!params.price) {
@@ -438,13 +444,13 @@ class BinanceService {
         orderParams.price = params.price.toString();
         orderParams.timeInForce = "GTC"; // Good Till Cancelled
       }
-  
+
       if (params.newClientOrderId) {
         orderParams.newClientOrderId = params.newClientOrderId;
       }
-  
+
       console.log("📝 Parámetros finales para Binance:", orderParams);
-  
+
       // Realizar la solicitud a la API de Binance
       const response = await this.makeAuthenticatedRequest(
         "/api/v3/order",
@@ -452,12 +458,12 @@ class BinanceService {
         orderParams,
         "POST"
       );
-  
+
       const responseText = await response.text();
-  
+
       if (!response.ok) {
         console.error("❌ Error en la orden de compra:", responseText);
-  
+
         try {
           const errorData = JSON.parse(responseText);
           return {
@@ -472,26 +478,28 @@ class BinanceService {
           };
         }
       }
-  
+
       // Parsear respuesta exitosa
       const orderData = JSON.parse(responseText) as BinanceOrder;
-  
+
       console.log("✅ Orden de compra ejecutada exitosamente");
       console.log("📋 Detalles de la orden:");
       console.log(`   ID: ${orderData.orderId}`);
       console.log(`   Símbolo: ${orderData.symbol}`);
-      
+
       // MODIFICADO: Manejar diferentes campos según el tipo de orden
       if (params.quoteOrderQty) {
-        console.log(`   Cantidad gastada (quoteOrderQty): ${params.quoteOrderQty}`);
+        console.log(
+          `   Cantidad gastada (quoteOrderQty): ${params.quoteOrderQty}`
+        );
       } else {
         console.log(`   Cantidad (quantity): ${orderData.origQty}`);
       }
-      
+
       console.log(`   Cantidad ejecutada: ${orderData.executedQty}`);
       console.log(`   Valor total: ${orderData.cummulativeQuoteQty}`);
       console.log(`   Estado: ${orderData.status}`);
-  
+
       // Si hay fills (transacciones individuales), mostrarlas
       if (orderData.fills && orderData.fills.length > 0) {
         console.log(`   📦 ${orderData.fills.length} transacción(es):`);
@@ -503,14 +511,14 @@ class BinanceService {
           );
         });
       }
-  
+
       return {
         success: true,
         order: orderData,
       };
     } catch (error) {
       console.error("💥 Error en placeBuyOrder:", error);
-  
+
       return {
         success: false,
         error:
@@ -620,102 +628,171 @@ class BinanceService {
     credentials: BinanceCredentials,
     symbol: string,
     quantity: number | string,
-    currentPrice?: number // Parámetro opcional para evitar doble consulta
+    currentPrice?: number
   ): Promise<{
     canSell: boolean;
     availableBalance: number;
     estimatedRevenue: number;
     baseAsset: string;
+    reasons?: string[];
   }> {
     try {
       console.log("=== 🔍 VERIFICANDO DISPONIBILIDAD PARA VENTA ===");
-  
-      // Obtener información del símbolo para conocer el base asset
+      const reasons: string[] = [];
+
+      // Obtener información del símbolo
       const symbolInfo = await this.getSymbolInfo(credentials, symbol);
-      const baseAsset = symbolInfo.baseAsset; // Ej: BTC, ETH, ADA, etc.
+      const baseAsset = symbolInfo.baseAsset;
       console.log(`💰 Base Asset: ${baseAsset}`);
-  
-      // Usa el precio proporcionado o obtén uno nuevo
+
+      // Obtener precio si no se proporciona
       let price = currentPrice;
       if (!price) {
         price = await this.getPrice(symbol);
       }
-      
+
       const quantityNum = parseFloat(quantity.toString());
       const estimatedRevenue = quantityNum * price;
-  
+
       // Obtener balance de la cuenta
       const accountResponse = await this.makeAuthenticatedRequest(
         "/api/v3/account",
         credentials
       );
-  
+
       if (!accountResponse.ok) {
         throw new Error("Error obteniendo balance de cuenta");
       }
-  
+
       const accountData =
         (await accountResponse.json()) as BinanceAccountResponse;
-  
+
       // Encontrar el balance del base asset
       const assetBalance = accountData.balances.find(
         (b) => b.asset === baseAsset
       );
-  
+
       if (!assetBalance) {
         console.log(`❌ No se encontró balance para ${baseAsset}`);
+        reasons.push(`No se encontró balance para ${baseAsset}`);
         return {
           canSell: false,
           availableBalance: 0,
           estimatedRevenue,
           baseAsset,
+          reasons,
         };
       }
-  
+
       const available = parseFloat(assetBalance.free);
-      const canSell = available >= quantityNum;
-  
-      console.log(`📊 Balance disponible de ${baseAsset}: ${available}`);
+      const locked = parseFloat(assetBalance.locked);
+
+      console.log(`📊 Balance total de ${baseAsset}: ${available + locked}`);
+      console.log(`📊 Balance disponible (free): ${available}`);
+      console.log(`📊 Balance bloqueado (locked): ${locked}`);
       console.log(`📊 Cantidad a vender: ${quantityNum}`);
       console.log(`💰 Precio actual de ${symbol}: ${price}`);
       console.log(`📈 Ingreso estimado: ${estimatedRevenue}`);
-      console.log(`✅ ¿Puede vender? ${canSell ? "Sí" : "No"}`);
-  
-      // Verificar también contra la cantidad mínima de venta del símbolo
-      if (canSell) {
-        const minQty = symbolInfo.minQty || 0;
-        const stepSize = symbolInfo.stepSize || 0;
-        
-        if (quantityNum < minQty) {
-          console.log(`❌ Cantidad menor al mínimo permitido: ${minQty}`);
-          return {
-            canSell: false,
-            availableBalance: available,
-            estimatedRevenue,
-            baseAsset,
-          };
-        }
-  
-        // Verificar que la cantidad sea múltiplo del step size
-        if (stepSize > 0) {
-          const remainder = quantityNum % stepSize;
-          if (remainder > 0.00000001) { // Tolerancia para errores de punto flotante
-            console.log(`❌ Cantidad no es múltiplo del step size: ${stepSize}`);
-            return {
-              canSell: false,
-              availableBalance: available,
-              estimatedRevenue,
-              baseAsset,
-            };
-          }
+
+      // Verificar balance disponible
+      if (available < quantityNum) {
+        const missing = quantityNum - available;
+        console.log(`❌ Saldo insuficiente. Faltan: ${missing} ${baseAsset}`);
+        reasons.push(
+          `Saldo insuficiente. Disponible: ${available} ${baseAsset}, Necesario: ${quantityNum} ${baseAsset}`
+        );
+      }
+
+      // Verificar cantidad mínima
+      const minQty = symbolInfo.minQty || 0;
+      if (quantityNum < minQty) {
+        console.log(`❌ Cantidad menor al mínimo permitido: ${minQty}`);
+        reasons.push(
+          `Cantidad (${quantityNum}) menor al mínimo permitido (${minQty})`
+        );
+      }
+
+      // Verificar step size
+      const stepSize = symbolInfo.stepSize || 0;
+      if (stepSize > 0) {
+        const remainder = quantityNum % stepSize;
+        const tolerance = 0.00000001;
+        if (
+          remainder > tolerance &&
+          Math.abs(remainder - stepSize) > tolerance
+        ) {
+          console.log(`❌ Cantidad no es múltiplo del step size: ${stepSize}`);
+          console.log(`❌ Remainder: ${remainder}`);
+          reasons.push(`Cantidad no es múltiplo del step size (${stepSize})`);
+
+          // Calcular cantidad válida más cercana
+          const validQuantity = Math.floor(quantityNum / stepSize) * stepSize;
+          console.log(`💡 Cantidad válida más cercana: ${validQuantity}`);
         }
       }
-  
+
+      // Verificar notional mínimo (valor mínimo de la orden)
+      const minNotional = symbolInfo.minNotional || 0;
+      if (estimatedRevenue < minNotional) {
+        console.log(
+          `❌ Valor de orden muy bajo. Mínimo requerido: ${minNotional} ${symbolInfo.quoteAsset}`
+        );
+        console.log(
+          `❌ Valor actual: ${estimatedRevenue} ${symbolInfo.quoteAsset}`
+        );
+        reasons.push(
+          `Valor de orden (${estimatedRevenue}) menor al mínimo requerido (${minNotional})`
+        );
+      }
+
+      // Verificar filtro de MARKET_LOT_SIZE si es una orden de mercado
+      const marketLotFilter = symbolInfo.filters.MARKET_LOT_SIZE;
+      if (marketLotFilter) {
+        const maxQtyMarket = parseFloat(marketLotFilter.maxQty || "0");
+        const minQtyMarket = parseFloat(marketLotFilter.minQty || "0");
+
+        if (quantityNum < minQtyMarket) {
+          console.log(
+            `❌ Cantidad menor al mínimo permitido para mercado: ${minQtyMarket}`
+          );
+          reasons.push(
+            `Cantidad menor al mínimo para órdenes de mercado (${minQtyMarket})`
+          );
+        }
+        if (quantityNum > maxQtyMarket && maxQtyMarket > 0) {
+          console.log(
+            `❌ Cantidad mayor al máximo permitido para mercado: ${maxQtyMarket}`
+          );
+          reasons.push(
+            `Cantidad mayor al máximo para órdenes de mercado (${maxQtyMarket})`
+          );
+        }
+      }
+
+      // Verificar filtro de MAX_NUM_ORDERS si es relevante
+      const maxOrdersFilter = symbolInfo.filters.MAX_NUM_ORDERS;
+      if (maxOrdersFilter && maxOrdersFilter.maxNumOrders) {
+        console.log(
+          `ℹ️ Límite máximo de órdenes: ${maxOrdersFilter.maxNumOrders}`
+        );
+      }
+
+      const canSell = reasons.length === 0;
+      console.log(`✅ ¿Puede vender? ${canSell ? "Sí" : "No"}`);
+
+      if (!canSell) {
+        console.log("📝 Razones del rechazo:");
+        reasons.forEach((reason, index) =>
+          console.log(`  ${index + 1}. ${reason}`)
+        );
+      }
+
       return {
         canSell,
         availableBalance: available,
         estimatedRevenue,
         baseAsset,
+        reasons: reasons.length > 0 ? reasons : undefined,
       };
     } catch (error) {
       console.error("Error verificando disponibilidad para venta:", error);
@@ -723,135 +800,141 @@ class BinanceService {
     }
   }
 
-async placeSellOrder(
-  credentials: BinanceCredentials,
-  params: {
-    symbol: string;
-    quantity?: number | string;
-    type?: "MARKET" | "LIMIT";
-    price?: number | string;
-    newClientOrderId?: string;
-    quoteOrderQty?: number | string;
-  }
-): Promise<OrderResponse> {
-  try {
-    console.log("=== 📤 INICIANDO ORDEN DE VENTA ===");
-    console.log("📊 Parámetros de la orden:", params);
-
-    // Validaciones básicas
-    if (!params.symbol) {
-      throw new Error("El símbolo es requerido");
+  async placeSellOrder(
+    credentials: BinanceCredentials,
+    params: {
+      symbol: string;
+      quantity?: number | string;
+      type?: "MARKET" | "LIMIT";
+      price?: number | string;
+      newClientOrderId?: string;
+      quoteOrderQty?: number | string;
     }
+  ): Promise<OrderResponse> {
+    try {
+      console.log("=== 📤 INICIANDO ORDEN DE VENTA ===");
+      console.log("📊 Parámetros de la orden:", params);
 
-    // Validación flexible para cantidad
-    if (!params.quantity && !params.quoteOrderQty && params.type !== "LIMIT") {
-      throw new Error("Se requiere quantity o quoteOrderQty para órdenes MARKET");
-    }
-
-    // Para órdenes LIMIT, quantity sigue siendo obligatorio
-    if (params.type === "LIMIT" && !params.quantity) {
-      throw new Error("La cantidad es requerida para órdenes LIMIT");
-    }
-
-    // Preparar parámetros para la orden
-    const orderParams: Record<string, string> = {
-      symbol: params.symbol.toUpperCase(),
-      side: "SELL", // ¡Este es el cambio principal!
-      type: params.type || "MARKET",
-    };
-
-    // Agregar quantity o quoteOrderQty según corresponda
-    if (params.quantity) {
-      orderParams.quantity = params.quantity.toString();
-    }
-
-    if (params.quoteOrderQty) {
-      orderParams.quoteOrderQty = params.quoteOrderQty.toString();
-    }
-
-    // Agregar parámetros específicos según el tipo de orden
-    if (params.type === "LIMIT") {
-      if (!params.price) {
-        throw new Error("El precio es requerido para órdenes LIMIT");
+      // Validaciones básicas
+      if (!params.symbol) {
+        throw new Error("El símbolo es requerido");
       }
-      orderParams.price = params.price.toString();
-      orderParams.timeInForce = "GTC";
-    }
 
-    if (params.newClientOrderId) {
-      orderParams.newClientOrderId = params.newClientOrderId;
-    }
-
-    console.log("📝 Parámetros finales para Binance (SELL):", orderParams);
-
-    // Realizar la solicitud a la API de Binance
-    const response = await this.makeAuthenticatedRequest(
-      "/api/v3/order",
-      credentials,
-      orderParams,
-      "POST"
-    );
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-      console.error("❌ Error en la orden de venta:", responseText);
-
-      try {
-        const errorData = JSON.parse(responseText);
-        return {
-          success: false,
-          error: errorData.msg || "Error desconocido",
-          code: errorData.code,
-        };
-      } catch {
-        return {
-          success: false,
-          error: responseText || "Error en la API de Binance",
-        };
-      }
-    }
-
-    // Parsear respuesta exitosa
-    const orderData = JSON.parse(responseText) as BinanceOrder;
-
-    console.log("✅ Orden de venta ejecutada exitosamente");
-    console.log("📋 Detalles de la orden:");
-    console.log(`   ID: ${orderData.orderId}`);
-    console.log(`   Símbolo: ${orderData.symbol}`);
-    console.log(`   Lado: SELL`);
-    console.log(`   Cantidad ejecutada: ${orderData.executedQty}`);
-    console.log(`   Valor total: ${orderData.cummulativeQuoteQty}`);
-    console.log(`   Estado: ${orderData.status}`);
-
-    // Si hay fills, mostrarlas
-    if (orderData.fills && orderData.fills.length > 0) {
-      console.log(`   📦 ${orderData.fills.length} transacción(es):`);
-      orderData.fills.forEach((fill, index) => {
-        console.log(
-          `      ${index + 1}. Precio: ${fill.price}, Cantidad: ${
-            fill.qty
-          }, Comisión: ${fill.commission} ${fill.commissionAsset}`
+      // Validación flexible para cantidad
+      if (
+        !params.quantity &&
+        !params.quoteOrderQty &&
+        params.type !== "LIMIT"
+      ) {
+        throw new Error(
+          "Se requiere quantity o quoteOrderQty para órdenes MARKET"
         );
-      });
+      }
+
+      // Para órdenes LIMIT, quantity sigue siendo obligatorio
+      if (params.type === "LIMIT" && !params.quantity) {
+        throw new Error("La cantidad es requerida para órdenes LIMIT");
+      }
+
+      // Preparar parámetros para la orden
+      const orderParams: Record<string, string> = {
+        symbol: params.symbol.toUpperCase(),
+        side: "SELL", // ¡Este es el cambio principal!
+        type: params.type || "MARKET",
+      };
+
+      // Agregar quantity o quoteOrderQty según corresponda
+      if (params.quantity) {
+        orderParams.quantity = params.quantity.toString();
+      }
+
+      if (params.quoteOrderQty) {
+        orderParams.quoteOrderQty = params.quoteOrderQty.toString();
+      }
+
+      // Agregar parámetros específicos según el tipo de orden
+      if (params.type === "LIMIT") {
+        if (!params.price) {
+          throw new Error("El precio es requerido para órdenes LIMIT");
+        }
+        orderParams.price = params.price.toString();
+        orderParams.timeInForce = "GTC";
+      }
+
+      if (params.newClientOrderId) {
+        orderParams.newClientOrderId = params.newClientOrderId;
+      }
+
+      console.log("📝 Parámetros finales para Binance (SELL):", orderParams);
+
+      // Realizar la solicitud a la API de Binance
+      const response = await this.makeAuthenticatedRequest(
+        "/api/v3/order",
+        credentials,
+        orderParams,
+        "POST"
+      );
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        console.error("❌ Error en la orden de venta:", responseText);
+
+        try {
+          const errorData = JSON.parse(responseText);
+          return {
+            success: false,
+            error: errorData.msg || "Error desconocido",
+            code: errorData.code,
+          };
+        } catch {
+          return {
+            success: false,
+            error: responseText || "Error en la API de Binance",
+          };
+        }
+      }
+
+      // Parsear respuesta exitosa
+      const orderData = JSON.parse(responseText) as BinanceOrder;
+
+      console.log("✅ Orden de venta ejecutada exitosamente");
+      console.log("📋 Detalles de la orden:");
+      console.log(`   ID: ${orderData.orderId}`);
+      console.log(`   Símbolo: ${orderData.symbol}`);
+      console.log(`   Lado: SELL`);
+      console.log(`   Cantidad ejecutada: ${orderData.executedQty}`);
+      console.log(`   Valor total: ${orderData.cummulativeQuoteQty}`);
+      console.log(`   Estado: ${orderData.status}`);
+
+      // Si hay fills, mostrarlas
+      if (orderData.fills && orderData.fills.length > 0) {
+        console.log(`   📦 ${orderData.fills.length} transacción(es):`);
+        orderData.fills.forEach((fill, index) => {
+          console.log(
+            `      ${index + 1}. Precio: ${fill.price}, Cantidad: ${
+              fill.qty
+            }, Comisión: ${fill.commission} ${fill.commissionAsset}`
+          );
+        });
+      }
+
+      return {
+        success: true,
+        order: orderData,
+      };
+    } catch (error) {
+      console.error("💥 Error en placeSellOrder:", error);
+
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error desconocido al realizar la orden",
+      };
     }
-
-    return {
-      success: true,
-      order: orderData,
-    };
-  } catch (error) {
-    console.error("💥 Error en placeSellOrder:", error);
-
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Error desconocido al realizar la orden",
-    };
   }
-}
 
   /**
    * Método para obtener información del símbolo (precios mínimos, lot size, etc.)
