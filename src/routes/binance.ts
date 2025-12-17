@@ -8,6 +8,7 @@ import {
 } from "../services/servicioBinance.js";
 import {
   BinanceCredentials,
+  ExchangeInfoResponse,
   TradeHistoryParams,
 } from "../interfaces/binance.types.js";
 import { servicioUsuario } from "../services/servicioUsuario.js";
@@ -1365,35 +1366,74 @@ binanceRouter.post("/check-sell", async (req, res) => {
 /**
  * Ruta para obtener información de un símbolo
  */
-binanceRouter.get("/symbol-info/:symbol", async (req, res) => {
+/**
+ * Ruta PÚBLICA para obtener información de un símbolo (sin credenciales)
+ */
+binanceRouter.get("/symbol-info-public/:symbol", async (req, res) => {
   try {
-    const { apiKey, apiSecret } = req.query;
     const { symbol } = req.params;
 
-    if (!apiKey || !apiSecret) {
-      return res.status(400).json({
+    console.log(`🔍 Obteniendo información pública para símbolo: ${symbol}`);
+
+    // Hacemos una solicitud pública a la API de Binance
+    const response = await fetch(
+      `https://api.binance.com/api/v3/exchangeInfo?symbol=${symbol.toUpperCase()}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Error de Binance: ${response.status}`);
+    }
+
+    const data = await response.json() as ExchangeInfoResponse;
+    const symbolInfo = data.symbols?.find(
+      (s: any) => s.symbol === symbol.toUpperCase()
+    );
+
+    if (!symbolInfo) {
+      return res.status(404).json({
         success: false,
-        error: "API Key y Secret son requeridos",
+        error: `Símbolo ${symbol} no encontrado`,
       });
     }
 
-    const credentials = {
-      apiKey: apiKey as string,
-      apiSecret: apiSecret as string,
+    // Extraer filtros importantes
+    const filters = symbolInfo.filters.reduce((acc: any, filter: any) => {
+      acc[filter.filterType] = filter;
+      return acc;
+    }, {});
+
+    // Extraer valores específicos de los filtros
+    const lotSizeFilter = filters.LOT_SIZE || {};
+    const minNotionalFilter = filters.MIN_NOTIONAL || filters.NOTIONAL || {};
+
+    const result = {
+      symbol: symbolInfo.symbol,
+      baseAsset: symbolInfo.baseAsset,
+      quoteAsset: symbolInfo.quoteAsset,
+      status: symbolInfo.status,
+      minQty: lotSizeFilter.minQty ? parseFloat(lotSizeFilter.minQty) : 0,
+      stepSize: lotSizeFilter.stepSize ? parseFloat(lotSizeFilter.stepSize) : 0,
+      minNotional: minNotionalFilter.minNotional 
+        ? parseFloat(minNotionalFilter.minNotional) 
+        : 0,
     };
 
-    const info = await binanceService.getSymbolInfo(credentials, symbol);
+    console.log("✅ Información pública obtenida:", {
+      symbol: result.symbol,
+      stepSize: result.stepSize,
+      minQty: result.minQty,
+    });
 
     res.json({
       success: true,
-      info,
+      symbolInfo: result,
     });
-  } catch (error) {
-    console.error("Error en /symbol-info:", error);
+  } catch (error: any) {
+    console.error("❌ Error en /symbol-info-public:", error);
     res.status(500).json({
       success: false,
-      error:
-        "Error obteniendo información del símbolo. Message: " + error.message,
+      error: "Error obteniendo información del símbolo",
+      message: error.message,
     });
   }
 });
