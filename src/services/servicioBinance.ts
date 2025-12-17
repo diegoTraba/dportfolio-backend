@@ -635,6 +635,7 @@ class BinanceService {
     estimatedRevenue: number;
     baseAsset: string;
     reasons?: string[];
+    stepSize?: number;
   }> {
     try {
       console.log("=== 🔍 VERIFICANDO DISPONIBILIDAD PARA VENTA ===");
@@ -653,7 +654,7 @@ class BinanceService {
 
       const quantityNum = parseFloat(quantity.toString());
       const estimatedRevenue = quantityNum * price;
-
+      const stepSize = symbolInfo.stepSize || 0;
       // Obtener balance de la cuenta
       const accountResponse = await this.makeAuthenticatedRequest(
         "/api/v3/account",
@@ -713,7 +714,7 @@ class BinanceService {
       }
 
       // Verificar step size
-      const stepSize = symbolInfo.stepSize || 0;
+      
       if (stepSize > 0) {
         const remainder = quantityNum % stepSize;
         const tolerance = 0.00000001;
@@ -793,6 +794,7 @@ class BinanceService {
         estimatedRevenue,
         baseAsset,
         reasons: reasons.length > 0 ? reasons : undefined,
+        stepSize: stepSize
       };
     } catch (error) {
       console.error("Error verificando disponibilidad para venta:", error);

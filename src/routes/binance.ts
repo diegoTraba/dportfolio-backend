@@ -1277,14 +1277,14 @@ binanceRouter.post("/user/:userId/sell", async (req, res) => {
 
       // 2. Actualizar la compra (marcar como vendida o reducir cantidad)
       const cantidadRestante = cantidadDisponible - cantidadAVender;
-      const estaCompletamenteVendida = cantidadRestante <= 0.00001; // Tolerancia por decimales
+      const estaCompletamenteVendida = cantidadRestante <= availability.stepSize; // Tolerancia por decimales
 
       const updateData: any = {
         vendida: estaCompletamenteVendida,
       };
 
       // Si la cantidad restante es muy pequeña, establecer a 0 y marcar como vendida
-      if (cantidadRestante < 0.00001) {
+      if (cantidadRestante < availability.stepSize) {
         updateData.cantidadRestante= 0
         updateData.vendida = true;
       }
