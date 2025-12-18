@@ -178,4 +178,29 @@ export const servicioUsuario = {
       throw error;
     }
   },
+  obtenerVentasUsuario: async (userId: string): Promise<any[]> => {
+    try {
+      console.log(`📊 Obteniendo ventas para usuario ID: ${userId}`);
+      
+      const supabase = getSupabaseClient();
+  
+      // Consulta a la tabla ventas filtrando por idUsuario
+      const { data: ventas, error } = await supabase
+        .from("ventas") // Asegúrate de que el nombre de la tabla sea correcto
+        .select("*")
+        .eq("idUsuario", userId)
+        .order("fechaVenta", { ascending: false }); // Ordenar por fecha descendente
+  
+      if (error) {
+        throw new Error(`Error al obtener ventas: ${error.message}`);
+      }
+  
+      console.log(`✅ Encontradas ${ventas?.length || 0} ventas para usuario ID: ${userId}`);
+      
+      return ventas || [];
+    } catch (error) {
+      console.error(`💥 Error al obtener ventas para usuario ${userId}:`, error);
+      throw error;
+    }
+  },
 };

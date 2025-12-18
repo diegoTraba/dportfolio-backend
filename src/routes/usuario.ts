@@ -37,6 +37,38 @@ router.get("/:userId/exchanges", async (req: Request, res: Response) => {
   }
 });
 
+// Ruta para cargar las ventas de un usuario
+router.get("/:userId/cargarventas", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ error: "ID de usuario no proporcionado" });
+    }
+
+    console.log(`👤 Obteniendo ventas para usuario ID: ${userId}`);
+
+    // Llamar al servicio para obtener las ventas
+    const ventas = await servicioUsuario.obtenerVentasUsuario(userId);
+
+    res.json({
+      success: true,
+      data: ventas,
+      count: ventas.length,
+      message:
+        ventas.length > 0
+          ? "Ventas obtenidas correctamente"
+          : "No se encontraron ventas para este usuario",
+    });
+  } catch (error) {
+    console.error("💥 Error al obtener ventas:", error);
+    res.status(500).json({
+      error: "Error interno del servidor al obtener ventas",
+      details: error instanceof Error ? error.message : "Error desconocido",
+    });
+  }
+});
+
 // Ruta para iniciar monitoreo de compras
 router.post(
   "/iniciar-monitoreo-compras",
