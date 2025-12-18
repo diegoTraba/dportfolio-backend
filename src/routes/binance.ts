@@ -1260,6 +1260,7 @@ binanceRouter.post("/user/:userId/sell", async (req, res) => {
         comisionMoneda: comisionMonedaVenta,
         beneficio: beneficio,
         porcentajeBeneficio: porcentajeBeneficio,
+        idUsuario: userId,
         fechaVenta: result.order?.transactTime
           ? new Date(result.order.transactTime).toISOString()
           : new Date().toISOString(),
