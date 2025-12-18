@@ -186,10 +186,13 @@ export const servicioUsuario = {
   
       // Consulta a la tabla ventas filtrando por idUsuario
       const { data: ventas, error } = await supabase
-        .from("ventas") // Asegúrate de que el nombre de la tabla sea correcto
-        .select("*")
-        .eq("idUsuario", userId)
-        .order("fechaVenta", { ascending: false }); // Ordenar por fecha descendente
+      .from("ventas")
+      .select(`
+        *,
+        compras:compras(*)
+      `)
+      .eq("idUsuario", userId)
+      .order("fechaVenta", { ascending: false });
   
       if (error) {
         throw new Error(`Error al obtener ventas: ${error.message}`);
