@@ -424,7 +424,7 @@ binanceRouter.get(
 
       return res.json({
         success: true,
-        trades: allBuyTrades.length,
+        trades: allBuyTrades,
       });
     } catch (error) {
       console.error("❌ Error obteniendo todas las compras:", error);
