@@ -20,6 +20,7 @@ import {
   BinanceTrade,
   TickerPrice,
   TradeHistoryParams,
+  TradeFeeResponse,
   OrderResponse,
   BinanceOrder,
   ExchangeInfoResponse,
@@ -1039,6 +1040,191 @@ class BinanceService {
       throw new Error(
         `Error obteniendo información del símbolo ${symbol}: ${error.message}`
       );
+    }
+  }
+
+   // ===========================================================================
+  // OBTENER TASAS DE COMISIÓN DEL USUARIO
+  // ===========================================================================
+
+  /**
+   * Obtener las tasas de comisión del usuario
+   * @param credentials Credenciales del usuario
+   * @param symbol (Opcional) Símbolo específico para determinar el asset de comisión
+   * @returns Objeto con tasas de comisión y asset de comisión
+   */
+  async getUserCommissionRates(
+    credentials: BinanceCredentials,
+    symbol?: string
+  ): Promise<{
+    success: boolean;
+    makerRate: number;
+    takerRate: number;
+    commissionAsset?: string;
+    error?: string;
+  }> {
+    try {
+      console.log("=== 💰 OBTENIENDO TASAS DE COMISIÓN DEL USUARIO ===");
+
+      // Obtener información de la cuenta para ver comisiones
+      const response = await this.makeAuthenticatedRequest(
+        "/api/v3/account",
+        credentials
+      );
+
+      if (!response.ok) {
+        throw new Error(`Error obteniendo información de cuenta: ${response.statusText}`);
+      }
+
+      const accountData = (await response.json()) as BinanceAccountResponse;
+
+      // En Binance, las comisiones vienen como enteros (ej: 10 = 0.001 = 0.1%)
+      // makerCommission: comisión para órdenes que añaden liquidez (LIMIT)
+      // takerCommission: comisión para órdenes que toman liquidez (MARKET)
+      const makerCommission = accountData.makerCommission || 10; // Valor por defecto 0.1%
+      const takerCommission = accountData.takerCommission || 10; // Valor por defecto 0.1%
+
+      // Convertir a decimal (10 = 0.001)
+      const makerRate = makerCommission / 10000;
+      const takerRate = takerCommission / 10000;
+
+      console.log(`💰 Comisiones del usuario:`);
+      console.log(`   Maker (LIMIT): ${makerRate} (${makerRate * 100}%)`);
+      console.log(`   Taker (MARKET): ${takerRate} (${takerRate * 100}%)`);
+
+      let commissionAsset = "USDC"; // Valor por defecto
+
+      // Determinar el asset de comisión basado en el símbolo si se proporciona
+      if (symbol) {
+        try {
+          const symbolInfo = await this.getSymbolInfo(credentials, symbol);
+          commissionAsset = symbolInfo.quoteAsset; // Normalmente la comisión se cobra en el quote asset
+          console.log(`💰 Asset de comisión determinado: ${commissionAsset}`);
+        } catch (error) {
+          console.warn("No se pudo determinar el asset de comisión, usando valor por defecto USDC");
+          // Fallback basado en el símbolo
+          if (symbol.includes("USDC")) {
+            commissionAsset = "USDC";
+          } else if (symbol.includes("USDT")) {
+            commissionAsset = "USDT";
+          }
+        }
+      }
+
+      // También podemos obtener información de comisión específica usando el endpoint de tradeFee
+      try {
+        const tradeFeeResponse = await this.makeAuthenticatedRequest(
+          "/sapi/v1/asset/tradeFee",
+          credentials,
+          symbol ? { symbol: symbol.toUpperCase() } : {}
+        );
+
+        if (tradeFeeResponse.ok) {
+          const tradeFeeData = (await tradeFeeResponse.json()) as TradeFeeResponse[];
+          console.log("📊 Información de comisión específica obtenida:", tradeFeeData);
+          
+          // Si hay datos específicos para el símbolo, podemos usarlos
+          if (tradeFeeData && tradeFeeData.length > 0) {
+            let symbolFee: TradeFeeResponse | undefined;
+          
+            // Buscar el símbolo específico si se proporcionó
+            if (symbol) {
+              symbolFee = tradeFeeData.find(fee => 
+                fee.symbol === symbol.toUpperCase()
+              );
+            }
+            
+            // Si no encontramos el símbolo específico, usar el primero
+            if (!symbolFee && tradeFeeData.length > 0) {
+              symbolFee = tradeFeeData[0];
+            }
+            
+            if (symbolFee) {
+              const specificMakerRate = parseFloat(symbolFee.makerCommission);
+              const specificTakerRate = parseFloat(symbolFee.takerCommission);
+              
+              console.log(`💰 Comisiones específicas para ${symbol || symbolFee.symbol}:`);
+              console.log(`   Maker: ${specificMakerRate} (${specificMakerRate * 100}%)`);
+              console.log(`   Taker: ${specificTakerRate} (${specificTakerRate * 100}%)`);
+              
+              // Usar las comisiones específicas si están disponibles
+              return {
+                success: true,
+                makerRate: specificMakerRate,
+                takerRate: specificTakerRate,
+                commissionAsset: commissionAsset,
+              };
+            }
+          }
+        }
+      } catch (tradeFeeError) {
+        console.warn("No se pudo obtener comisiones específicas, usando comisiones generales:", tradeFeeError);
+        // Continuar con las comisiones generales
+      }
+
+      return {
+        success: true,
+        makerRate,
+        takerRate,
+        commissionAsset,
+      };
+    } catch (error) {
+      console.error("❌ Error obteniendo tasas de comisión:", error);
+
+      // Valores por defecto en caso de error
+      return {
+        success: false,
+        makerRate: 0.001, // 0.1%
+        takerRate: 0.001, // 0.1%
+        commissionAsset: symbol?.includes("USDC") ? "USDC" : "USDT",
+        error: error instanceof Error ? error.message : "Error desconocido",
+      };
+    }
+  }
+
+  /**
+   * Método simplificado para obtener la tasa de comisión general
+   * (Mantener compatibilidad con el endpoint que ya estás usando)
+   */
+  async getUserCommissionRate(
+    credentials: BinanceCredentials,
+    symbol: string
+  ): Promise<{
+    success: boolean;
+    commissionRate: number;
+    commissionAsset: string;
+    makerRate?: number;
+    takerRate?: number;
+    error?: string;
+  }> {
+    try {
+      console.log(`=== 💰 OBTENIENDO TASA DE COMISIÓN PARA ${symbol} ===`);
+
+      // Obtener tasas completas
+      const commissionRates = await this.getUserCommissionRates(credentials, symbol);
+
+      if (!commissionRates.success) {
+        throw new Error(commissionRates.error || "Error obteniendo comisiones");
+      }
+
+      // Para uso general, usar taker rate (para órdenes MARKET por defecto)
+      // El frontend puede cambiar a maker rate para órdenes LIMIT
+      return {
+        success: true,
+        commissionRate: commissionRates.takerRate, // Por defecto para MARKET
+        commissionAsset: commissionRates.commissionAsset || "USDC",
+        makerRate: commissionRates.makerRate,
+        takerRate: commissionRates.takerRate,
+      };
+    } catch (error) {
+      console.error("❌ Error en getUserCommissionRate:", error);
+
+      return {
+        success: false,
+        commissionRate: 0.001, // 0.1% por defecto
+        commissionAsset: symbol.includes("USDC") ? "USDC" : "USDT",
+        error: error instanceof Error ? error.message : "Error desconocido",
+      };
     }
   }
   // ===========================================================================

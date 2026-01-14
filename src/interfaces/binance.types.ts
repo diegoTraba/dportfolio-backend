@@ -44,9 +44,26 @@ export interface BinanceCredentials {
     total: number;
   }
   
+  export interface TradeFeeResponse {
+    symbol: string;
+    makerCommission: string; // Binance devuelve estos como strings
+    takerCommission: string;
+    // Puede haber otros campos según la respuesta
+  }
+  
   // Interface para la respuesta de la cuenta de Binance
   export interface BinanceAccountResponse {
+    makerCommission: number;
+    takerCommission: number;
+    buyerCommission: number;
+    sellerCommission: number;
+    canTrade: boolean;
+    canWithdraw: boolean;
+    canDeposit: boolean;
+    updateTime: number;
+    accountType: string;
     balances: BinanceBalance[];
+    permissions: string[];
     // otras propiedades que pueda tener la respuesta...
   }
   

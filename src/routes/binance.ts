@@ -436,6 +436,27 @@ binanceRouter.get(
   }
 );
 
+binanceRouter.get('/api/binance/user-commission-rate/:symbol', async (req, res) => {
+  const { symbol } = req.params.symbol;
+  try {
+    
+    const credentials = req.user.credentials; // Asumiendo que tienes las credenciales del usuario
+    
+    const commissionData = await binanceService.getUserCommissionRate(credentials, symbol);
+    
+    res.json(commissionData);
+    
+  } catch (error) {
+    console.error('Error obteniendo tasa de comisión:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error obteniendo tasa de comisión',
+      commissionRate: 0.001,
+      commissionAsset: symbol.includes('USDC') ? 'USDC' : 'USDT'
+    });
+  }
+});
+
 // Endpoint para obtener las compras activas (no vendidas) de un usuario
 binanceRouter.get(
   "/compras-activas/:userId",
