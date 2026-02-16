@@ -26,6 +26,12 @@ import {
   ExchangeInfoResponse,
 } from "../interfaces/binance.types";
 
+import {
+  EMA,
+  RSI,
+  MACD
+} from 'technicalindicators';
+
 // Lista fija de símbolos a consultar
 export const SUPPORTED_SYMBOLS = [
   "BTCUSDC",
@@ -1512,6 +1518,330 @@ class BinanceService {
       throw error;
     }
   }
+
+     //////////////////////
+    // ANALISIS TECNICO //
+   //////////////////////
+
+    /**
+   * Obtiene velas (candlesticks) de un símbolo
+   * @param symbol Par, ej. 'BTCUSDC'
+   * @param interval Intervalo: '1m', '5m', '1h', '1d', etc.
+   * @param limit Número de velas a obtener (máximo 1000)
+   * @returns Array de velas con precios de cierre, apertura, etc.
+   */
+  async getKlines(
+    symbol: string,
+    interval: string = '1h',
+    limit: number = 100
+  ): Promise<{ time: number; open: number; high: number; low: number; close: number; volume: number }[]> {
+    try {
+      console.log(`📊 Obteniendo ${limit} velas de ${symbol} (${interval})...`);
+
+      // Endpoint público, no necesita autenticación
+      const params = {
+        symbol: symbol.toUpperCase(),
+        interval,
+        limit: limit.toString(),
+      };
+
+      // Usamos makeAuthenticatedRequest aunque no requiera clave; igual funciona
+      const response = await this.makeAuthenticatedRequest('/api/v3/klines', {} as BinanceCredentials, params, 'GET');
+
+      if (!response.ok) {
+        throw new Error(`Error obteniendo klines: ${response.statusText}`);
+      }
+
+      const data = await response.json() as any[];
+
+      // Transformar a un formato más amigable
+      return data.map((kline: any[]) => ({
+        time: kline[0],           // timestamp de apertura
+        open: parseFloat(kline[1]),
+        high: parseFloat(kline[2]),
+        low: parseFloat(kline[3]),
+        close: parseFloat(kline[4]),
+        volume: parseFloat(kline[5]),
+      }));
+    } catch (error) {
+      console.error(`❌ Error en getKlines para ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+    // ===========================================================================
+  // MÉTODOS PRIVADOS DE CÁLCULO DE INDICADORES
+  // ===========================================================================
+
+  /**
+   * Calcula la EMA para un array de precios
+   * @param values Array de precios (normalmente cierres)
+   * @param period Período de la EMA (ej. 7, 21)
+   * @returns Array de EMA (misma longitud que values, con NaN en los primeros period-1)
+   */
+  private calculateEMA(values: number[], period: number): number[] {
+    try {
+      const ema = EMA.calculate({ period, values });
+      // Rellenar con NaN al inicio para mantener la misma longitud
+      const padding = new Array(values.length - ema.length).fill(NaN);
+      return [...padding, ...ema];
+    } catch (error) {
+      console.error(`Error calculando EMA (period=${period}):`, error);
+      return new Array(values.length).fill(NaN);
+    }
+  }
+
+  /**
+   * Calcula el RSI para un array de precios
+   * @param values Array de precios (cierres)
+   * @param period Período del RSI (por defecto 14)
+   * @returns Array de RSI (misma longitud que values, con NaN en los primeros period)
+   */
+  private calculateRSI(values: number[], period: number = 14): number[] {
+    try {
+      const rsi = RSI.calculate({ period, values });
+      const padding = new Array(values.length - rsi.length).fill(NaN);
+      return [...padding, ...rsi];
+    } catch (error) {
+      console.error(`Error calculando RSI (period=${period}):`, error);
+      return new Array(values.length).fill(NaN);
+    }
+  }
+
+  /**
+   * Calcula el MACD para un array de precios
+   * @param values Array de precios (cierres)
+   * @param fastPeriod Período rápido (por defecto 12)
+   * @param slowPeriod Período lento (por defecto 26)
+   * @param signalPeriod Período de señal (por defecto 9)
+   * @returns Objeto con arrays MACD, signal e histogram (misma longitud que values)
+   */
+  private calculateMACD(
+    values: number[],
+    fastPeriod: number = 12,
+    slowPeriod: number = 26,
+    signalPeriod: number = 9
+  ): { macd: number[]; signal: number[]; histogram: number[] } {
+    try {
+      const result = MACD.calculate({
+        values,
+        fastPeriod,
+        slowPeriod,
+        signalPeriod,
+        SimpleMAOscillator: false,
+        SimpleMASignal: false
+      });
+      
+      // result es un array de objetos { MACD, signal, histogram }
+      const macdArray = result.map(r => r.MACD);
+      const signalArray = result.map(r => r.signal);
+      const histogramArray = result.map(r => r.histogram);
+
+      // Calcular padding: el resultado comienza después de slowPeriod - 1 elementos
+      const paddingLength = values.length - macdArray.length;
+      const padding = new Array(paddingLength).fill(NaN);
+
+      return {
+        macd: [...padding, ...macdArray],
+        signal: [...padding, ...signalArray],
+        histogram: [...padding, ...histogramArray]
+      };
+    } catch (error) {
+      console.error('Error calculando MACD:', error);
+      const nanArray = new Array(values.length).fill(NaN);
+      return { macd: nanArray, signal: nanArray, histogram: nanArray };
+    }
+  }
+
+  // ===========================================================================
+  // LÓGICA DE SEÑALES (basada en tu guía)
+  // ===========================================================================
+
+  /**
+   * Evalúa señales de compra/venta basadas en EMA, RSI y MACD
+   * Devuelve una acción y un nivel de confianza
+   */
+  private evaluateSignals(
+    closes: number[],
+    ema7: number[],
+    ema21: number[],
+    rsi: number[],
+    macd: { macd: number[]; signal: number[]; histogram: number[] }
+  ): { action: 'BUY' | 'SELL' | 'NONE'; confidence: number } {
+    const lastIndex = closes.length - 1;
+    const prevIndex = lastIndex - 1;
+
+    // Necesitamos suficientes datos
+    if (lastIndex < 30) return { action: 'NONE', confidence: 0 };
+
+    // Función auxiliar para obtener el último valor no-NaN (busca hacia atrás)
+    const getPrevValid = (arr: number[], idx: number): number | null => {
+      for (let i = idx; i >= 0; i--) {
+        if (!isNaN(arr[i])) return arr[i];
+      }
+      return null;
+    };
+
+    const currentEMA7 = ema7[lastIndex];
+    const prevEMA7 = getPrevValid(ema7, prevIndex);
+    const currentEMA21 = ema21[lastIndex];
+    const prevEMA21 = getPrevValid(ema21, prevIndex);
+
+    const currentRSI = rsi[lastIndex];
+    const prevRSI = getPrevValid(rsi, prevIndex);
+
+    const currentMACD = macd.macd[lastIndex];
+    const prevMACD = getPrevValid(macd.macd, prevIndex);
+    const currentSignal = macd.signal[lastIndex];
+    const prevSignal = getPrevValid(macd.signal, prevIndex);
+
+    // Si faltan valores, no hay señal
+    if (
+      currentEMA7 === null || currentEMA21 === null ||
+      prevEMA7 === null || prevEMA21 === null ||
+      currentRSI === null || prevRSI === null ||
+      currentMACD === null || prevMACD === null ||
+      currentSignal === null || prevSignal === null
+    ) {
+      return { action: 'NONE', confidence: 0 };
+    }
+
+    let buySignals = 0;
+    let sellSignals = 0;
+    let totalSignals = 0;
+
+    // Condición 1: Cruce de EMAs
+    if (prevEMA7 <= prevEMA21 && currentEMA7 > currentEMA21) {
+      buySignals++;
+      totalSignals++;
+    } else if (prevEMA7 >= prevEMA21 && currentEMA7 < currentEMA21) {
+      sellSignals++;
+      totalSignals++;
+    }
+
+    // Condición 2: Cruce de MACD y señal
+    if (prevMACD <= prevSignal && currentMACD > currentSignal) {
+      buySignals++;
+      totalSignals++;
+    } else if (prevMACD >= prevSignal && currentMACD < currentSignal) {
+      sellSignals++;
+      totalSignals++;
+    }
+
+    // Condición 3: RSI sale de sobreventa/sobrecompra
+    if (prevRSI < 30 && currentRSI > 30) {
+      buySignals++;
+      totalSignals++;
+    } else if (prevRSI > 70 && currentRSI < 70) {
+      sellSignals++;
+      totalSignals++;
+    }
+
+    if (totalSignals === 0) return { action: 'NONE', confidence: 0 };
+
+    const buyConfidence = buySignals / totalSignals;
+    const sellConfidence = sellSignals / totalSignals;
+
+    if (buyConfidence > sellConfidence && buyConfidence >= 0.5) {
+      return { action: 'BUY', confidence: buyConfidence };
+    } else if (sellConfidence > buyConfidence && sellConfidence >= 0.5) {
+      return { action: 'SELL', confidence: sellConfidence };
+    } else {
+      return { action: 'NONE', confidence: 0 };
+    }
+  }
+
+  // ===========================================================================
+  // MÉTODOS PÚBLICOS PARA EXPONER SEÑALES
+  // ===========================================================================
+
+  /**
+   * Obtiene indicadores técnicos y señales para un símbolo específico
+   * @param symbol Par (ej. 'BTCUSDC')
+   * @param interval Intervalo de velas (ej. '1h', '1d')
+   * @param limit Número de velas a obtener (recomendado >= 100)
+   * @returns Objeto con precios, indicadores y señal
+   */
+  async getTechnicalSignals(
+    symbol: string,
+    interval: string = '1h',
+    limit: number = 100
+  ): Promise<{
+    symbol: string;
+    interval: string;
+    lastClose: number;
+    timestamp: number;
+    indicators: {
+      ema7: number[];
+      ema21: number[];
+      rsi: number[];
+      macd: { macd: number[]; signal: number[]; histogram: number[] };
+    };
+    signals: { action: 'BUY' | 'SELL' | 'NONE'; confidence: number };
+  }> {
+    try {
+      // 1. Obtener velas
+      const klines = await this.getKlines(symbol, interval, limit);
+      const closes = klines.map(k => k.close);
+
+      // 2. Calcular indicadores
+      const ema7 = this.calculateEMA(closes, 7);
+      const ema21 = this.calculateEMA(closes, 21);
+      const rsi = this.calculateRSI(closes, 14);
+      const macd = this.calculateMACD(closes, 12, 26, 9);
+
+      // 3. Evaluar señales
+      const signals = this.evaluateSignals(closes, ema7, ema21, rsi, macd);
+
+      return {
+        symbol,
+        interval,
+        lastClose: closes[closes.length - 1],
+        timestamp: Date.now(),
+        indicators: {
+          ema7,
+          ema21,
+          rsi,
+          macd
+        },
+        signals
+      };
+    } catch (error) {
+      console.error(`Error en getTechnicalSignals para ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene señales para todos los símbolos soportados
+   * @param interval Intervalo de velas
+   * @param limit Número de velas por símbolo
+   * @returns Array de resultados (los que fallan se omiten)
+   */
+  async getAllTechnicalSignals(
+    interval: string = '1h',
+    limit: number = 100
+  ): Promise<Array<{
+    symbol: string;
+    interval: string;
+    lastClose: number;
+    timestamp: number;
+    indicators: any;
+    signals: { action: 'BUY' | 'SELL' | 'NONE'; confidence: number };
+  }>> {
+    const promises = SUPPORTED_SYMBOLS.map(async (symbol) => {
+      try {
+        return await this.getTechnicalSignals(symbol, interval, limit);
+      } catch (error) {
+        console.error(`Error obteniendo señales para ${symbol}:`, error);
+        return null;
+      }
+    });
+
+    const results = await Promise.all(promises);
+    return results.filter(r => r !== null) as any[];
+  }
+
 }
 
 /**

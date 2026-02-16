@@ -12,6 +12,7 @@ import alertasRoutes from "./routes/alertas";
 import notificacionesRoutes from "./routes/notificaciones"
 import authRoutes from './routes/auth';
 import usuarioRoutes from './routes/usuario'
+import aTecnicoRoutes from './routes/atecnico';
 
 // Servicios
 import { monitorService } from './services/servicioMonitoreo';
@@ -53,6 +54,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/usuario', usuarioRoutes);
 app.use('/api/binance', binanceRoutes);
+app.use('/api/atecnico', aTecnicoRoutes);
 app.use('/api/alertas', alertasRoutes);
 app.use('/api/notificaciones', authenticateToken, notificacionesRoutes);
 
