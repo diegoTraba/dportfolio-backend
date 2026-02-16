@@ -35,6 +35,7 @@ import {
 // Lista fija de símbolos a consultar
 export const SUPPORTED_SYMBOLS = [
   "BTCUSDC",
+  "BTCUSDT",
   "ETHUSDC",
   "SOLUSDC",
   "ADAUSDC",
