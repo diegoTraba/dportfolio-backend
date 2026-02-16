@@ -1394,7 +1394,7 @@ class BinanceService {
       console.log(`📝 Additional Params:`, additionalParams);
 
       // Determinar si es un endpoint público
-      const isPublicEndpoint = endpoint.includes("/api/v3/exchangeInfo");
+      const isPublicEndpoint = endpoint.includes("/api/v3/exchangeInfo") || endpoint.includes("/api/v3/klines");
 
       let url: string;
 
@@ -1832,6 +1832,7 @@ class BinanceService {
   }>> {
     const promises = SUPPORTED_SYMBOLS.map(async (symbol) => {
       try {
+        console.log
         return await this.getTechnicalSignals(symbol, interval, limit);
       } catch (error) {
         console.error(`Error obteniendo señales para ${symbol}:`, error);
