@@ -26,11 +26,7 @@ import {
   ExchangeInfoResponse,
 } from "../interfaces/binance.types";
 
-import {
-  EMA,
-  RSI,
-  MACD
-} from 'technicalindicators';
+import { EMA, RSI, MACD } from "technicalindicators";
 
 // Lista fija de símbolos a consultar
 export const SUPPORTED_SYMBOLS = [
@@ -44,6 +40,18 @@ export const SUPPORTED_SYMBOLS = [
   "AVAXUSDC",
   "LINKUSDC",
 ];
+
+type IntervalSignal = {
+  interval: string;
+  lastClose: number;
+  indicators: {
+    ema7: number[];
+    ema21: number[];
+    rsi: number[];
+    macd: { macd: number[]; signal: number[]; histogram: number[] };
+  };
+  signals: { action: "BUY" | "SELL" | "NONE"; confidence: number };
+};
 
 // =============================================================================
 // CLASE PRINCIPAL DEL SERVICIO
@@ -722,7 +730,7 @@ class BinanceService {
       }
 
       // Verificar step size
-      
+
       if (stepSize > 0) {
         const remainder = quantityNum % stepSize;
         const tolerance = 0.00000001;
@@ -802,7 +810,7 @@ class BinanceService {
         estimatedRevenue,
         baseAsset,
         reasons: reasons.length > 0 ? reasons : undefined,
-        stepSize: stepSize
+        stepSize: stepSize,
       };
     } catch (error) {
       console.error("Error verificando disponibilidad para venta:", error);
@@ -1050,7 +1058,7 @@ class BinanceService {
     }
   }
 
-   // ===========================================================================
+  // ===========================================================================
   // OBTENER TASAS DE COMISIÓN DEL USUARIO
   // ===========================================================================
 
@@ -1080,7 +1088,9 @@ class BinanceService {
       );
 
       if (!response.ok) {
-        throw new Error(`Error obteniendo información de cuenta: ${response.statusText}`);
+        throw new Error(
+          `Error obteniendo información de cuenta: ${response.statusText}`
+        );
       }
 
       const accountData = (await response.json()) as BinanceAccountResponse;
@@ -1108,7 +1118,9 @@ class BinanceService {
           commissionAsset = symbolInfo.quoteAsset; // Normalmente la comisión se cobra en el quote asset
           console.log(`💰 Asset de comisión determinado: ${commissionAsset}`);
         } catch (error) {
-          console.warn("No se pudo determinar el asset de comisión, usando valor por defecto USDC");
+          console.warn(
+            "No se pudo determinar el asset de comisión, usando valor por defecto USDC"
+          );
           // Fallback basado en el símbolo
           if (symbol.includes("USDC")) {
             commissionAsset = "USDC";
@@ -1127,33 +1139,43 @@ class BinanceService {
         );
 
         if (tradeFeeResponse.ok) {
-          const tradeFeeData = (await tradeFeeResponse.json()) as TradeFeeResponse[];
-          console.log("📊 Información de comisión específica obtenida:", tradeFeeData);
-          
+          const tradeFeeData =
+            (await tradeFeeResponse.json()) as TradeFeeResponse[];
+          console.log(
+            "📊 Información de comisión específica obtenida:",
+            tradeFeeData
+          );
+
           // Si hay datos específicos para el símbolo, podemos usarlos
           if (tradeFeeData && tradeFeeData.length > 0) {
             let symbolFee: TradeFeeResponse | undefined;
-          
+
             // Buscar el símbolo específico si se proporcionó
             if (symbol) {
-              symbolFee = tradeFeeData.find(fee => 
-                fee.symbol === symbol.toUpperCase()
+              symbolFee = tradeFeeData.find(
+                (fee) => fee.symbol === symbol.toUpperCase()
               );
             }
-            
+
             // Si no encontramos el símbolo específico, usar el primero
             if (!symbolFee && tradeFeeData.length > 0) {
               symbolFee = tradeFeeData[0];
             }
-            
+
             if (symbolFee) {
               const specificMakerRate = parseFloat(symbolFee.makerCommission);
               const specificTakerRate = parseFloat(symbolFee.takerCommission);
-              
-              console.log(`💰 Comisiones específicas para ${symbol || symbolFee.symbol}:`);
-              console.log(`   Maker: ${specificMakerRate} (${specificMakerRate * 100}%)`);
-              console.log(`   Taker: ${specificTakerRate} (${specificTakerRate * 100}%)`);
-              
+
+              console.log(
+                `💰 Comisiones específicas para ${symbol || symbolFee.symbol}:`
+              );
+              console.log(
+                `   Maker: ${specificMakerRate} (${specificMakerRate * 100}%)`
+              );
+              console.log(
+                `   Taker: ${specificTakerRate} (${specificTakerRate * 100}%)`
+              );
+
               // Usar las comisiones específicas si están disponibles
               return {
                 success: true,
@@ -1165,7 +1187,10 @@ class BinanceService {
           }
         }
       } catch (tradeFeeError) {
-        console.warn("No se pudo obtener comisiones específicas, usando comisiones generales:", tradeFeeError);
+        console.warn(
+          "No se pudo obtener comisiones específicas, usando comisiones generales:",
+          tradeFeeError
+        );
         // Continuar con las comisiones generales
       }
 
@@ -1208,7 +1233,10 @@ class BinanceService {
       console.log(`=== 💰 OBTENIENDO TASA DE COMISIÓN PARA ${symbol} ===`);
 
       // Obtener tasas completas
-      const commissionRates = await this.getUserCommissionRates(credentials, symbol);
+      const commissionRates = await this.getUserCommissionRates(
+        credentials,
+        symbol
+      );
 
       if (!commissionRates.success) {
         throw new Error(commissionRates.error || "Error obteniendo comisiones");
@@ -1394,7 +1422,9 @@ class BinanceService {
       console.log(`📝 Additional Params:`, additionalParams);
 
       // Determinar si es un endpoint público
-      const isPublicEndpoint = endpoint.includes("/api/v3/exchangeInfo") || endpoint.includes("/api/v3/klines");
+      const isPublicEndpoint =
+        endpoint.includes("/api/v3/exchangeInfo") ||
+        endpoint.includes("/api/v3/klines");
 
       let url: string;
 
@@ -1520,11 +1550,11 @@ class BinanceService {
     }
   }
 
-     //////////////////////
-    // ANALISIS TECNICO //
-   //////////////////////
+  //////////////////////
+  // ANALISIS TECNICO //
+  //////////////////////
 
-    /**
+  /**
    * Obtiene velas (candlesticks) de un símbolo
    * @param symbol Par, ej. 'BTCUSDC'
    * @param interval Intervalo: '1m', '5m', '1h', '1d', etc.
@@ -1533,9 +1563,18 @@ class BinanceService {
    */
   async getKlines(
     symbol: string,
-    interval: string = '1h',
+    interval: string = "1h",
     limit: number = 100
-  ): Promise<{ time: number; open: number; high: number; low: number; close: number; volume: number }[]> {
+  ): Promise<
+    {
+      time: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }[]
+  > {
     try {
       console.log(`📊 Obteniendo ${limit} velas de ${symbol} (${interval})...`);
 
@@ -1547,17 +1586,22 @@ class BinanceService {
       };
 
       // Usamos makeAuthenticatedRequest aunque no requiera clave; igual funciona
-      const response = await this.makeAuthenticatedRequest('/api/v3/klines', {} as BinanceCredentials, params, 'GET');
+      const response = await this.makeAuthenticatedRequest(
+        "/api/v3/klines",
+        {} as BinanceCredentials,
+        params,
+        "GET"
+      );
 
       if (!response.ok) {
         throw new Error(`Error obteniendo klines: ${response.statusText}`);
       }
 
-      const data = await response.json() as any[];
+      const data = (await response.json()) as any[];
 
       // Transformar a un formato más amigable
       return data.map((kline: any[]) => ({
-        time: kline[0],           // timestamp de apertura
+        time: kline[0], // timestamp de apertura
         open: parseFloat(kline[1]),
         high: parseFloat(kline[2]),
         low: parseFloat(kline[3]),
@@ -1570,7 +1614,7 @@ class BinanceService {
     }
   }
 
-    // ===========================================================================
+  // ===========================================================================
   // MÉTODOS PRIVADOS DE CÁLCULO DE INDICADORES
   // ===========================================================================
 
@@ -1630,13 +1674,13 @@ class BinanceService {
         slowPeriod,
         signalPeriod,
         SimpleMAOscillator: false,
-        SimpleMASignal: false
+        SimpleMASignal: false,
       });
-      
+
       // result es un array de objetos { MACD, signal, histogram }
-      const macdArray = result.map(r => r.MACD);
-      const signalArray = result.map(r => r.signal);
-      const histogramArray = result.map(r => r.histogram);
+      const macdArray = result.map((r) => r.MACD);
+      const signalArray = result.map((r) => r.signal);
+      const histogramArray = result.map((r) => r.histogram);
 
       // Calcular padding: el resultado comienza después de slowPeriod - 1 elementos
       const paddingLength = values.length - macdArray.length;
@@ -1645,10 +1689,10 @@ class BinanceService {
       return {
         macd: [...padding, ...macdArray],
         signal: [...padding, ...signalArray],
-        histogram: [...padding, ...histogramArray]
+        histogram: [...padding, ...histogramArray],
       };
     } catch (error) {
-      console.error('Error calculando MACD:', error);
+      console.error("Error calculando MACD:", error);
       const nanArray = new Array(values.length).fill(NaN);
       return { macd: nanArray, signal: nanArray, histogram: nanArray };
     }
@@ -1668,12 +1712,12 @@ class BinanceService {
     ema21: number[],
     rsi: number[],
     macd: { macd: number[]; signal: number[]; histogram: number[] }
-  ): { action: 'BUY' | 'SELL' | 'NONE'; confidence: number } {
+  ): { action: "BUY" | "SELL" | "NONE"; confidence: number } {
     const lastIndex = closes.length - 1;
     const prevIndex = lastIndex - 1;
 
     // Necesitamos suficientes datos
-    if (lastIndex < 30) return { action: 'NONE', confidence: 0 };
+    if (lastIndex < 30) return { action: "NONE", confidence: 0 };
 
     // Función auxiliar para obtener el último valor no-NaN (busca hacia atrás)
     const getPrevValid = (arr: number[], idx: number): number | null => {
@@ -1698,13 +1742,18 @@ class BinanceService {
 
     // Si faltan valores, no hay señal
     if (
-      currentEMA7 === null || currentEMA21 === null ||
-      prevEMA7 === null || prevEMA21 === null ||
-      currentRSI === null || prevRSI === null ||
-      currentMACD === null || prevMACD === null ||
-      currentSignal === null || prevSignal === null
+      currentEMA7 === null ||
+      currentEMA21 === null ||
+      prevEMA7 === null ||
+      prevEMA21 === null ||
+      currentRSI === null ||
+      prevRSI === null ||
+      currentMACD === null ||
+      prevMACD === null ||
+      currentSignal === null ||
+      prevSignal === null
     ) {
-      return { action: 'NONE', confidence: 0 };
+      return { action: "NONE", confidence: 0 };
     }
 
     let buySignals = 0;
@@ -1738,17 +1787,17 @@ class BinanceService {
       totalSignals++;
     }
 
-    if (totalSignals === 0) return { action: 'NONE', confidence: 0 };
+    if (totalSignals === 0) return { action: "NONE", confidence: 0 };
 
     const buyConfidence = buySignals / totalSignals;
     const sellConfidence = sellSignals / totalSignals;
 
     if (buyConfidence > sellConfidence && buyConfidence >= 0.5) {
-      return { action: 'BUY', confidence: buyConfidence };
+      return { action: "BUY", confidence: buyConfidence };
     } else if (sellConfidence > buyConfidence && sellConfidence >= 0.5) {
-      return { action: 'SELL', confidence: sellConfidence };
+      return { action: "SELL", confidence: sellConfidence };
     } else {
-      return { action: 'NONE', confidence: 0 };
+      return { action: "NONE", confidence: 0 };
     }
   }
 
@@ -1765,7 +1814,7 @@ class BinanceService {
    */
   async getTechnicalSignals(
     symbol: string,
-    interval: string = '1h',
+    interval: string = "1h",
     limit: number = 100
   ): Promise<{
     symbol: string;
@@ -1778,12 +1827,12 @@ class BinanceService {
       rsi: number[];
       macd: { macd: number[]; signal: number[]; histogram: number[] };
     };
-    signals: { action: 'BUY' | 'SELL' | 'NONE'; confidence: number };
+    signals: { action: "BUY" | "SELL" | "NONE"; confidence: number };
   }> {
     try {
       // 1. Obtener velas
       const klines = await this.getKlines(symbol, interval, limit);
-      const closes = klines.map(k => k.close);
+      const closes = klines.map((k) => k.close);
 
       // 2. Calcular indicadores
       const ema7 = this.calculateEMA(closes, 7);
@@ -1803,9 +1852,9 @@ class BinanceService {
           ema7,
           ema21,
           rsi,
-          macd
+          macd,
         },
-        signals
+        signals,
       };
     } catch (error) {
       console.error(`Error en getTechnicalSignals para ${symbol}:`, error);
@@ -1820,19 +1869,21 @@ class BinanceService {
    * @returns Array de resultados (los que fallan se omiten)
    */
   async getAllTechnicalSignals(
-    interval: string = '1h',
+    interval: string = "1h",
     limit: number = 100
-  ): Promise<Array<{
-    symbol: string;
-    interval: string;
-    lastClose: number;
-    timestamp: number;
-    indicators: any;
-    signals: { action: 'BUY' | 'SELL' | 'NONE'; confidence: number };
-  }>> {
+  ): Promise<
+    Array<{
+      symbol: string;
+      interval: string;
+      lastClose: number;
+      timestamp: number;
+      indicators: any;
+      signals: { action: "BUY" | "SELL" | "NONE"; confidence: number };
+    }>
+  > {
     const promises = SUPPORTED_SYMBOLS.map(async (symbol) => {
       try {
-        console.log
+        console.log;
         return await this.getTechnicalSignals(symbol, interval, limit);
       } catch (error) {
         console.error(`Error obteniendo señales para ${symbol}:`, error);
@@ -1841,9 +1892,121 @@ class BinanceService {
     });
 
     const results = await Promise.all(promises);
-    return results.filter(r => r !== null) as any[];
+    return results.filter((r) => r !== null) as any[];
   }
 
+  /**
+   * Obtiene señales para un símbolo en un intervalo específico (uso interno)
+   */
+  private async getSignalsForInterval(
+    symbol: string,
+    interval: string,
+    limit: number = 100
+  ): Promise<IntervalSignal> {
+    const klines = await this.getKlines(symbol, interval, limit);
+    const closes = klines.map((k) => k.close);
+    const ema7 = this.calculateEMA(closes, 7);
+    const ema21 = this.calculateEMA(closes, 21);
+    const rsi = this.calculateRSI(closes, 14);
+    const macd = this.calculateMACD(closes, 12, 26, 9);
+    const signals = this.evaluateSignals(closes, ema7, ema21, rsi, macd);
+    return {
+      interval,
+      lastClose: closes[closes.length - 1],
+      indicators: { ema7, ema21, rsi, macd },
+      signals,
+    };
+  }
+
+  /**
+   * Obtiene señales combinadas para varios intervalos (ej. ['3m','5m'])
+   */
+  async getTechnicalSignalsMulti(
+    symbol: string,
+    intervals: string[] = ["3m", "5m"],
+    limit: number = 100
+  ): Promise<{
+    symbol: string;
+    timestamp: number;
+    intervals: IntervalSignal[];
+    combinedSignal: { action: "BUY" | "SELL" | "NONE"; confidence: number };
+  }> {
+    try {
+      // Obtener señales para cada intervalo en paralelo
+      const intervalPromises = intervals.map((interval) =>
+        this.getSignalsForInterval(symbol, interval, limit).catch((err) => {
+          console.error(`Error en intervalo ${interval} para ${symbol}:`, err);
+          return null;
+        })
+      );
+      const intervalResults = await Promise.all(intervalPromises);
+      const validIntervals = intervalResults.filter(
+        (r) => r !== null
+      ) as IntervalSignal[];
+
+      // Combinar señales: contamos cuántos intervalos dan BUY y cuántos SELL
+      let buyCount = 0;
+      let sellCount = 0;
+      validIntervals.forEach((ir) => {
+        if (ir.signals.action === "BUY") buyCount++;
+        else if (ir.signals.action === "SELL") sellCount++;
+      });
+      const total = validIntervals.length;
+      let combinedAction: "BUY" | "SELL" | "NONE" = "NONE";
+      let combinedConfidence = 0;
+      if (total > 0) {
+        if (buyCount > sellCount) {
+          combinedAction = "BUY";
+          combinedConfidence = buyCount / total;
+        } else if (sellCount > buyCount) {
+          combinedAction = "SELL";
+          combinedConfidence = sellCount / total;
+        } else {
+          combinedAction = "NONE";
+          combinedConfidence = 0;
+        }
+      }
+
+      return {
+        symbol,
+        timestamp: Date.now(),
+        intervals: validIntervals,
+        combinedSignal: {
+          action: combinedAction,
+          confidence: combinedConfidence,
+        },
+      };
+    } catch (error) {
+      console.error(`Error en getTechnicalSignalsMulti para ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene señales combinadas para todos los símbolos soportados
+   */
+  async getAllTechnicalSignalsMulti(
+    intervals: string[] = ["3m", "5m"],
+    limit: number = 100
+  ): Promise<
+    Array<{
+      symbol: string;
+      timestamp: number;
+      intervals: IntervalSignal[];
+      combinedSignal: { action: "BUY" | "SELL" | "NONE"; confidence: number };
+    }>
+  > {
+    const promises = SUPPORTED_SYMBOLS.map(async (symbol) => {
+      try {
+        return await this.getTechnicalSignalsMulti(symbol, intervals, limit);
+      } catch (error) {
+        console.error(`Error obteniendo señales multi para ${symbol}:`, error);
+        return null;
+      }
+    });
+    const results = await Promise.all(promises);
+    return results.filter((r) => r !== null) as any[];
+  }
 }
 
 /**
