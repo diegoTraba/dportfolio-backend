@@ -31,7 +31,6 @@ import { EMA, RSI, MACD } from "technicalindicators";
 // Lista fija de símbolos a consultar
 export const SUPPORTED_SYMBOLS = [
   "BTCUSDC",
-  "BTCUSDT",
   "ETHUSDC",
   "SOLUSDC",
   "ADAUSDC",
@@ -39,6 +38,8 @@ export const SUPPORTED_SYMBOLS = [
   "BNBUSDC",
   "AVAXUSDC",
   "LINKUSDC",
+  "DOGEUSDC",
+  "PEPEUSDC"
 ];
 
 import { getSupabaseClient } from "../lib/supabase.js";
