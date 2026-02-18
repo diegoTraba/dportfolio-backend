@@ -2482,7 +2482,6 @@ class BinanceService {
                   simbolo: symbol,
                   precioVenta: precioVentaReal,
                   cantidadVendida: cantidadAVender,
-                  totalVenta: totalVentaReal,
                   comisionVenta: comisionTotalVenta,
                   comisionMoneda: comisionMonedaVenta,
                   beneficio: beneficio,
