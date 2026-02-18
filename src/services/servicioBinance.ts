@@ -41,6 +41,8 @@ export const SUPPORTED_SYMBOLS = [
   "LINKUSDC",
 ];
 
+import { getSupabaseClient } from "../lib/supabase.js";
+
 type IntervalSignal = {
   interval: string;
   lastClose: number;
@@ -2010,152 +2012,473 @@ class BinanceService {
   }
 
   /**
- * Ejecuta órdenes de compra/venta basadas en las señales combinadas.
- * @param credentials Credenciales de Binance
- * @param tradeAmountUSD Cantidad en USD (quote) a invertir en cada compra (por defecto 10)
- * @param intervals Intervalos a considerar
- * @param limit Número de velas por intervalo
- * @param cooldownMinutes Minutos de espera entre operaciones del mismo símbolo (por defecto 5)
- */
-async executeTrades(
-  credentials: BinanceCredentials,
-  tradeAmountUSD: number = 10,
-  intervals: string[] = ["3m", "5m"],
-  limit: number = 50,
-  cooldownMinutes: number = 5
-): Promise<{
-  executed: {
-    symbol: string;
-    side: 'BUY' | 'SELL';
-    success: boolean;
-    order?: any;
-    error?: string;
-    skipped?: boolean;
-    reason?: string;
-  }[]
-}> {
-  const results: { symbol: string; side: 'BUY' | 'SELL'; success: boolean; order?: any; error?: string; skipped?: boolean; reason?: string; }[] = [];
-  const cooldownMs = cooldownMinutes * 60 * 1000;
+   * Ejecuta órdenes de compra/venta basadas en las señales combinadas.
+   * @param credentials Credenciales de Binance
+   * @param tradeAmountUSD Cantidad en USD (quote) a invertir en cada compra (por defecto 10)
+   * @param intervals Intervalos a considerar
+   * @param limit Número de velas por intervalo
+   * @param cooldownMinutes Minutos de espera entre operaciones del mismo símbolo (por defecto 5)
+   */
+  async executeTrades(
+    credentials: BinanceCredentials,
+    userId: string,
+    tradeAmountUSD: number = 10,
+    intervals: string[] = ["3m", "5m"],
+    limit: number = 50,
+    cooldownMinutes: number = 3
+  ): Promise<{
+    executed: {
+      symbol: string;
+      side: "BUY" | "SELL";
+      success: boolean;
+      order?: any;
+      error?: string;
+      skipped?: boolean;
+      reason?: string;
+      dbSaved?: boolean;
+    }[];
+  }> {
+    const results: {
+      symbol: string;
+      side: "BUY" | "SELL";
+      success: boolean;
+      order?: any;
+      error?: string;
+      skipped?: boolean;
+      reason?: string;
+      dbSaved?: boolean;
+    }[] = [];
+    const cooldownMs = cooldownMinutes * 60 * 1000;
 
-  try {
-    // 1. Obtener señales combinadas para todos los símbolos
-    const allSignals = await this.getAllTechnicalSignalsMulti(intervals, limit);
+    try {
+      // Obtener señales combinadas para todos los símbolos
+      const allSignals = await this.getAllTechnicalSignalsMulti(
+        intervals,
+        limit
+      );
 
-    for (const signal of allSignals) {
-      const { symbol, combinedSignal } = signal;
+      for (const signal of allSignals) {
+        const { symbol, combinedSignal } = signal;
 
-      // Verificar cooldown
-      const lastTrade = this.lastTradeTime.get(symbol);
-      if (lastTrade && Date.now() - lastTrade < cooldownMs) {
-        const minsLeft = ((cooldownMs - (Date.now() - lastTrade)) / 60000).toFixed(1);
-        console.log(`⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`);
-        results.push({
-          symbol,
-          side: combinedSignal.action === 'BUY' ? 'BUY' : 'SELL',
-          success: false,
-          skipped: true,
-          reason: `Cooldown activo (espera ${minsLeft} min)`
-        });
-        continue;
-      }
-
-      // Ignorar si confianza < 0.5
-      if (combinedSignal.confidence < 0.5) continue;
-
-      if (combinedSignal.action === 'BUY') {
-        console.log(`🔔 Señal de COMPRA para ${symbol} con confianza ${combinedSignal.confidence}. Verificando disponibilidad...`);
-
-        // Obtener precio actual para convertir USD a cantidad base
-        const currentPrice = await this.getPrice(symbol);
-        const quantityBase = tradeAmountUSD / currentPrice;
-
-        // Verificar disponibilidad de compra
-        const availability = await this.checkBuyAvailability(
-          credentials,
-          symbol,
-          quantityBase,
-          currentPrice
-        );
-
-        if (!availability.canBuy) {
-          console.log(`❌ No se puede comprar ${symbol}: saldo insuficiente de ${availability.quoteAsset} (disponible: ${availability.availableBalance}, necesario: ${availability.estimatedCost})`);
-          results.push({ symbol, side: 'BUY', success: false, error: `Saldo insuficiente de ${availability.quoteAsset}` });
+        // Verificar cooldown
+        const lastTrade = this.lastTradeTime.get(symbol);
+        if (lastTrade && Date.now() - lastTrade < cooldownMs) {
+          const minsLeft = (
+            (cooldownMs - (Date.now() - lastTrade)) /
+            60000
+          ).toFixed(1);
+          console.log(
+            `⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`
+          );
+          results.push({
+            symbol,
+            side: combinedSignal.action === "BUY" ? "BUY" : "SELL",
+            success: false,
+            skipped: true,
+            reason: `Cooldown activo (espera ${minsLeft} min)`,
+          });
           continue;
         }
 
-        console.log(`✅ Disponibilidad OK. Ejecutando orden de compra para ${symbol}...`);
-        const buyResult = await this.placeBuyOrder(credentials, {
-          symbol,
-          quoteOrderQty: tradeAmountUSD,  // usamos quoteOrderQty para comprar exactamente tradeAmountUSD
-          type: 'MARKET'
-        });
+        // Ignorar si confianza < 0.5
+        if (combinedSignal.confidence < 0.5) continue;
 
-        if (buyResult.success) {
-          console.log(`✅ Orden de compra ejecutada para ${symbol}`);
-          this.lastTradeTime.set(symbol, Date.now()); // actualizar cooldown
-          results.push({ symbol, side: 'BUY', success: true, order: buyResult.order });
-        } else {
-          console.error(`❌ Error en compra de ${symbol}:`, buyResult.error);
-          results.push({ symbol, side: 'BUY', success: false, error: buyResult.error });
+        // ========== COMPRA ==========
+        if (combinedSignal.action === "BUY") {
+          console.log(
+            `🔔 Señal de COMPRA para ${symbol} con confianza ${combinedSignal.confidence}. Verificando disponibilidad...`
+          );
+
+          const currentPrice = await this.getPrice(symbol);
+          const quantityBase = tradeAmountUSD / currentPrice;
+          const rangoInferior = currentPrice * 0.996;
+          const rangoSuperior = currentPrice * 1.004;
+
+          // --- NUEVA VERIFICACIÓN: compra existente en rango ±0.4% ---
+          const supabase = getSupabaseClient();
+          const { data: compraExistente, error: errorExistente } = await supabase
+            .from("compras")
+            .select("id, precio")
+            .eq("simbolo", symbol)
+            .eq("idUsuario", userId)
+            .eq("botS", true)
+            .eq("vendida", false)
+            .gte("precio", rangoInferior)
+            .lte("precio", rangoSuperior)
+            .limit(1);
+
+          if (errorExistente) {
+            console.error("⚠️ Error verificando compras existentes:", errorExistente);
+            results.push({
+              symbol,
+              side: "BUY",
+              success: false,
+              error: "Error al verificar compras previas",
+            });
+            continue;
+          }
+
+          if (compraExistente && compraExistente.length > 0) {
+            console.log(
+              `⏭️ Ya existe una compra activa de ${symbol} en el rango de ±0.4% del precio actual (precio compra: ${compraExistente[0].precio}). Omitiendo.`
+            );
+            results.push({
+              symbol,
+              side: "BUY",
+              success: false,
+              skipped: true,
+              reason: "Compra existente en rango de precio cercano",
+            });
+            continue;
+          }
+          // -------------------------------------------------------------
+
+          const availability = await this.checkBuyAvailability(
+            credentials,
+            symbol,
+            quantityBase,
+            currentPrice
+          );
+          if (!availability.canBuy) {
+            console.log(
+              `❌ No se puede comprar ${symbol}: saldo insuficiente de ${availability.quoteAsset}`
+            );
+            results.push({
+              symbol,
+              side: "BUY",
+              success: false,
+              error: `Saldo insuficiente de ${availability.quoteAsset}`,
+            });
+            continue;
+          }
+
+          console.log(
+            `✅ Disponibilidad OK. Ejecutando orden de compra para ${symbol}...`
+          );
+          const buyResult = await this.placeBuyOrder(credentials, {
+            symbol,
+            quoteOrderQty: tradeAmountUSD,
+            type: "MARKET",
+          });
+
+          if (buyResult.success) {
+            console.log(`✅ Orden de compra ejecutada para ${symbol}`);
+            this.lastTradeTime.set(symbol, Date.now());
+
+            let dbSaved = false;
+            try {
+              const supabase = getSupabaseClient();
+
+              // Calcular comisión total en USDC
+              let comisionTotalUSDC = 0;
+              if (buyResult.order.fills && buyResult.order.fills.length > 0) {
+                buyResult.order.fills.forEach((fill: any) => {
+                  if (
+                    fill.commissionAsset === "USDC" ||
+                    fill.commissionAsset === "USDT"
+                  ) {
+                    comisionTotalUSDC += parseFloat(fill.commission);
+                  }
+                });
+              }
+
+              const datosCompra = {
+                exchange: "Binance",
+                idOrden: buyResult.order?.orderId?.toString() || "",
+                simbolo: symbol,
+                precio: buyResult.order?.fills?.[0]?.price
+                  ? parseFloat(buyResult.order.fills[0].price)
+                  : currentPrice,
+                cantidad: quantityBase, // cantidad base comprada
+                total: buyResult.order?.cummulativeQuoteQty
+                  ? parseFloat(buyResult.order.cummulativeQuoteQty)
+                  : null,
+                comision: comisionTotalUSDC,
+                comisionMoneda: "USDC",
+                fechaCompra: buyResult.order?.transactTime
+                  ? new Date(buyResult.order.transactTime).toISOString()
+                  : new Date().toISOString(),
+                vendida: false,
+                idUsuario: userId,
+                botS: true,
+              };
+
+              const { error: errorInsercion } = await supabase
+                .from("compras")
+                .insert([datosCompra]);
+              if (errorInsercion) {
+                console.error(
+                  "⚠️ Error guardando compra en BD:",
+                  errorInsercion
+                );
+              } else {
+                console.log("✅ Compra guardada en base de datos local");
+                dbSaved = true;
+              }
+            } catch (dbError) {
+              console.error("⚠️ Error en guardado BD:", dbError);
+            }
+
+            results.push({
+              symbol,
+              side: "BUY",
+              success: true,
+              order: buyResult.order,
+              dbSaved,
+            });
+          } else {
+            console.error(`❌ Error en compra de ${symbol}:`, buyResult.error);
+            results.push({
+              symbol,
+              side: "BUY",
+              success: false,
+              error: buyResult.error,
+            });
+          }
+        }
+
+        // ========== VENTA ==========
+        else if (combinedSignal.action === "SELL") {
+          console.log(
+            `🔔 Señal de VENTA para ${symbol} con confianza ${combinedSignal.confidence}. Verificando disponibilidad...`
+          );
+
+          // Obtener precio actual y calcular umbral (0.5% por debajo)
+          const currentPrice = await this.getPrice(symbol);
+          const umbral = currentPrice * 0.995; // precio de compra debe ser menor a este valor
+
+          // 1. Obtener balance disponible del activo base
+          const availability = await this.checkSellAvailability(
+            credentials,
+            symbol,
+            1,
+            undefined
+          );
+          let balanceDisponible = availability.availableBalance;
+          if (balanceDisponible <= 0) {
+            console.log(
+              `⚠️ No hay balance de ${availability.baseAsset} para vender.`
+            );
+            results.push({
+              symbol,
+              side: "SELL",
+              success: false,
+              error: `Balance insuficiente de ${availability.baseAsset}`,
+            });
+            continue;
+          }
+
+          // 2. Buscar en BD todas las compras no vendidas de este símbolo con botS=true y precio < umbral
+          const supabase = getSupabaseClient();
+          const { data: compras, error: errorBusqueda } = await supabase
+            .from("compras")
+            .select("*")
+            .eq("simbolo", symbol)
+            .eq("idUsuario", userId)
+            .eq("vendida", false)
+            .eq("botS", true)
+            .lt("precio", umbral) // precio de compra menor que el umbral
+            .order("fechaCompra", { ascending: true });
+
+          if (errorBusqueda || !compras || compras.length === 0) {
+            console.log(
+              `⚠️ No hay compras de ${symbol} con precio un 0.5% por debajo del actual (${currentPrice}). No se vende.`
+            );
+            results.push({
+              symbol,
+              side: "SELL",
+              success: false,
+              error: "No hay compras rentables para vender",
+            });
+            continue;
+          }
+
+          console.log(
+            `📦 Se encontraron ${compras.length} compra(s) que cumplen la condición.`
+          );
+
+          // 3. Verificar que el balance total sea suficiente para la suma de todas las cantidades
+          const cantidadTotalAVender = compras.reduce(
+            (sum, c) => sum + c.cantidad,
+            0
+          );
+          if (balanceDisponible < cantidadTotalAVender) {
+            console.log(
+              `❌ Balance insuficiente para vender todas las compras elegibles. Disponible: ${balanceDisponible}, necesario: ${cantidadTotalAVender}.`
+            );
+            results.push({
+              symbol,
+              side: "SELL",
+              success: false,
+              error:
+                "Balance insuficiente para vender todas las compras elegibles",
+            });
+            continue;
+          }
+
+          // 4. Ejecutar ventas individuales para cada compra
+          for (const compra of compras) {
+            const cantidadAVender = compra.cantidad;
+
+            // Verificar que la cantidad sea válida según los filtros de Binance (step size, minNotional, etc.)
+            const sellCheck = await this.checkSellAvailability(
+              credentials,
+              symbol,
+              cantidadAVender,
+              currentPrice
+            );
+            if (!sellCheck.canSell) {
+              console.log(
+                `❌ No se puede vender ${cantidadAVender} de ${symbol} (compra ${compra.id}):`,
+                sellCheck.reasons
+              );
+              results.push({
+                symbol,
+                side: "SELL",
+                success: false,
+                error: sellCheck.reasons?.join(", "),
+              });
+              continue; // pasar a la siguiente compra
+            }
+
+            console.log(
+              `✅ Vendiendo ${cantidadAVender} de ${symbol} correspondiente a compra ${compra.id}...`
+            );
+            const sellResult = await this.placeSellOrder(credentials, {
+              symbol,
+              quantity: cantidadAVender,
+              type: "MARKET",
+            });
+
+            if (sellResult.success) {
+              console.log(
+                `✅ Orden de venta ejecutada para compra ${compra.id}`
+              );
+              this.lastTradeTime.set(symbol, Date.now());
+
+              let dbSaved = false;
+              try {
+                // Calcular comisiones y precio promedio de venta
+                let comisionTotalVenta = 0;
+                let comisionMonedaVenta = "";
+                let precioVentaReal = 0;
+
+                if (
+                  sellResult.order.fills &&
+                  sellResult.order.fills.length > 0
+                ) {
+                  let totalCantidad = 0;
+                  let totalValor = 0;
+                  sellResult.order.fills.forEach((fill: any) => {
+                    const cantidad = parseFloat(fill.qty);
+                    const precio = parseFloat(fill.price);
+                    totalCantidad += cantidad;
+                    totalValor += cantidad * precio;
+
+                    if (
+                      fill.commissionAsset === "USDC" ||
+                      fill.commissionAsset === "USDT"
+                    ) {
+                      comisionTotalVenta += parseFloat(fill.commission);
+                      comisionMonedaVenta = fill.commissionAsset;
+                    } else if (!comisionMonedaVenta) {
+                      comisionMonedaVenta = fill.commissionAsset;
+                    }
+                  });
+                  precioVentaReal = totalValor / totalCantidad;
+                }
+
+                const totalVentaReal = sellResult.order?.cummulativeQuoteQty
+                  ? parseFloat(sellResult.order.cummulativeQuoteQty)
+                  : cantidadAVender * precioVentaReal;
+
+                // Calcular beneficio
+                const totalCompra =
+                  compra.total || compra.precio * cantidadAVender;
+                const beneficio = totalVentaReal - totalCompra;
+                const porcentajeBeneficio = (beneficio / totalCompra) * 100;
+
+                // Insertar en tabla ventas
+                const datosVenta = {
+                  idCompra: compra.id,
+                  exchange: "Binance",
+                  simbolo: symbol,
+                  precioVenta: precioVentaReal,
+                  cantidadVendida: cantidadAVender,
+                  totalVenta: totalVentaReal,
+                  comisionVenta: comisionTotalVenta,
+                  comisionMoneda: comisionMonedaVenta,
+                  beneficio: beneficio,
+                  porcentajeBeneficio: porcentajeBeneficio,
+                  idUsuario: userId,
+                  fechaVenta: sellResult.order?.transactTime
+                    ? new Date(sellResult.order.transactTime).toISOString()
+                    : new Date().toISOString(),
+                  botS: true,
+                };
+
+                const { error: errorVenta } = await supabase
+                  .from("ventas")
+                  .insert([datosVenta]);
+                if (errorVenta) {
+                  console.error("⚠️ Error guardando venta en BD:", errorVenta);
+                } else {
+                  console.log("✅ Venta guardada en base de datos");
+                  dbSaved = true;
+                }
+
+                // Marcar la compra como vendida
+                const { error: errorUpdateCompra } = await supabase
+                  .from("compras")
+                  .update({ vendida: true })
+                  .eq("id", compra.id);
+
+                if (errorUpdateCompra) {
+                  console.error(
+                    "⚠️ Error actualizando compra:",
+                    errorUpdateCompra
+                  );
+                } else {
+                  console.log("✅ Compra marcada como vendida");
+                }
+
+                // Restar del balance disponible (para control interno)
+                balanceDisponible -= cantidadAVender;
+              } catch (dbError) {
+                console.error("⚠️ Error en guardado BD:", dbError);
+              }
+
+              results.push({
+                symbol,
+                side: "SELL",
+                success: true,
+                order: sellResult.order,
+                dbSaved,
+              });
+            } else {
+              console.error(
+                `❌ Error en venta de compra ${compra.id}:`,
+                sellResult.error
+              );
+              results.push({
+                symbol,
+                side: "SELL",
+                success: false,
+                error: sellResult.error,
+              });
+              // Si falla una orden, detenemos el proceso para este símbolo (podría afectar el balance)
+              break;
+            }
+          }
         }
       }
-      else if (combinedSignal.action === 'SELL') {
-        console.log(`🔔 Señal de VENTA para ${symbol} con confianza ${combinedSignal.confidence}. Verificando disponibilidad...`);
-
-        // Primero obtenemos el balance disponible llamando a checkSellAvailability con una cantidad simbólica (1)
-        // Esto nos devuelve availableBalance sin necesidad de hacer otra petición.
-        const availability = await this.checkSellAvailability(
-          credentials,
-          symbol,
-          1, // cantidad simbólica (no importa, solo queremos el balance)
-          undefined
-        );
-
-        const balance = availability.availableBalance;
-        if (balance <= 0) {
-          console.log(`⚠️ No hay balance de ${availability.baseAsset} para vender.`);
-          results.push({ symbol, side: 'SELL', success: false, error: `Balance insuficiente de ${availability.baseAsset}` });
-          continue;
-        }
-
-        // Verificar que se puede vender exactamente esa cantidad (respetando step size, minNotional, etc.)
-        const sellCheck = await this.checkSellAvailability(
-          credentials,
-          symbol,
-          balance,
-          undefined
-        );
-
-        if (!sellCheck.canSell) {
-          console.log(`❌ No se puede vender ${balance} de ${symbol}:`, sellCheck.reasons);
-          results.push({ symbol, side: 'SELL', success: false, error: sellCheck.reasons?.join(', ') });
-          continue;
-        }
-
-        console.log(`✅ Disponibilidad OK. Ejecutando orden de venta de ${balance} ${availability.baseAsset} para ${symbol}...`);
-        const sellResult = await this.placeSellOrder(credentials, {
-          symbol,
-          quantity: balance,
-          type: 'MARKET'
-        });
-
-        if (sellResult.success) {
-          console.log(`✅ Orden de venta ejecutada para ${symbol}`);
-          this.lastTradeTime.set(symbol, Date.now());
-          results.push({ symbol, side: 'SELL', success: true, order: sellResult.order });
-        } else {
-          console.error(`❌ Error en venta de ${symbol}:`, sellResult.error);
-          results.push({ symbol, side: 'SELL', success: false, error: sellResult.error });
-        }
-      }
+    } catch (error) {
+      console.error("Error en executeTrades:", error);
+      throw error;
     }
-  } catch (error) {
-    console.error("Error en executeTrades:", error);
-    throw error;
-  }
 
-  return { executed: results };
-}
+    return { executed: results };
+  }
 }
 
 /**

@@ -76,7 +76,7 @@ router.get('/signals-multi', async (req, res) => {
  */
 router.post('/execute', async (req, res) => {
   try {
-    const { credentials, tradeAmountUSD = 10, intervals = '3m,5m', limit = 50, cooldownMinutes = 5 } = req.body;
+    const { credentials, userId="", tradeAmountUSD = 10, intervals = '3m,5m', limit = 50, cooldownMinutes = 5 } = req.body;
     
     if (!credentials || !credentials.apiKey || !credentials.apiSecret) {
       return res.status(400).json({ error: 'Credenciales incompletas' });
@@ -85,6 +85,7 @@ router.post('/execute', async (req, res) => {
     const intervalArray = (intervals as string).split(',').map(s => s.trim());
     const result = await binanceService.executeTrades(
       credentials,
+      userId,
       Number(tradeAmountUSD),
       intervalArray,
       Number(limit),
