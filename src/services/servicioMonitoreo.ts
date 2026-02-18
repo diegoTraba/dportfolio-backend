@@ -10,6 +10,13 @@ export interface DatosPrecio {
   fechaActualizacion: string;
 }
 
+interface BotConfig {
+  tradeAmountUSD: number;
+  intervals: string[];
+  limit: number;
+  cooldownMinutes: number;
+}
+
 export interface CompraUsuario {
   id: number;
   user_id: string;
@@ -20,10 +27,12 @@ export interface CompraUsuario {
   // Puedes añadir más campos según tu esquema
 }
 
+
 export class ServicioMonitoreo {
   private estaMonitoreando: boolean = false;
   private idIntervalo: NodeJS.Timeout | null = null;
   private monitoreosComprasActivos: Map<string, NodeJS.Timeout> = new Map();
+  private usuariosBotActivos: Map<string, BotConfig> = new Map();
 
   // Obtener precio de un símbolo específico
   async obtenerPrecioSimbolo(simbolo: string): Promise<DatosPrecio> {
@@ -190,6 +199,7 @@ export class ServicioMonitoreo {
         // Aquí podrías añadir lógica para verificar alertas
         await this.verificarAlertas(precios);
 
+        this.ejecutarBotUsuariosActivos();
         console.log("✅ Ciclo de monitoreo completado\n");
       } catch (error) {
         console.error("💥 Error en el monitoreo de precios:", error);
@@ -687,6 +697,90 @@ export class ServicioMonitoreo {
   // Obtener lista de usuarios con monitoreo activo
   obtenerUsuariosConMonitoreoActivo(): string[] {
     return Array.from(this.monitoreosComprasActivos.keys());
+  }
+
+  //BOT trading
+  activarBot(userId: string, config: Partial<BotConfig> = {}): boolean {
+    if (this.usuariosBotActivos.has(userId)) {
+      console.log(`⚠️ El bot ya está activo para el usuario ${userId}`);
+      return false;
+    }
+    
+    // Valores por defecto
+    const configCompleta: BotConfig = {
+      tradeAmountUSD: config.tradeAmountUSD ?? 10,
+      intervals: config.intervals ?? ['3m', '5m'],
+      limit: config.limit ?? 50,
+      cooldownMinutes: config.cooldownMinutes ?? 5,
+    };
+  
+    this.usuariosBotActivos.set(userId, configCompleta);
+    console.log(`✅ Bot activado para el usuario ${userId} con configuración:`, configCompleta);
+    return true;
+  }
+  
+  desactivarBot(userId: string): boolean {
+    return this.usuariosBotActivos.delete(userId);
+  }
+  
+  obtenerUsuariosActivos(): { userId: string; config: BotConfig }[] {
+    return Array.from(this.usuariosBotActivos.entries()).map(([userId, config]) => ({
+      userId,
+      config,
+    }));
+  }
+
+  private async ejecutarBotUsuariosActivos() {
+    if (this.usuariosBotActivos.size === 0) {
+      console.log("🤖 No hay usuarios con bot activo.");
+      return;
+    }
+  
+    console.log(`🤖 Ejecutando bot para ${this.usuariosBotActivos.size} usuario(s) activo(s)...`);
+  
+    const baseUrl = 'https://dportfolio-pi.vercel.app';
+  
+    for (const [userId, config] of this.usuariosBotActivos.entries()) {
+      try {
+        console.log(`🚀 Procesando usuario ${userId}...`);
+  
+        const response = await fetch(`${baseUrl}/api/atecnico/execute`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            tradeAmountUSD: config.tradeAmountUSD,
+            intervals: config.intervals.join(','),
+            limit: config.limit,
+            cooldownMinutes: config.cooldownMinutes,
+          }),
+        });
+  
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+  
+        const result = await response.json();
+        console.log(`✅ Bot ejecutado para usuario ${userId}. Resultado:`, result);
+  
+        // Opcional: notificar vía WebSocket
+        webSocketService.enviarNotificacion(userId, {
+          tipo: 'bot_ejecutado',
+          mensaje: `Bot ejecutado correctamente.`,
+          resultado: result,
+        });
+  
+      } catch (error) {
+        console.error(`❌ Error ejecutando bot para usuario ${userId}:`, error);
+        
+        // Opcional: notificar error
+        webSocketService.enviarNotificacion(userId, {
+          tipo: 'bot_error',
+          mensaje: `Error al ejecutar el bot: ${error.message}`,
+        });
+      }
+    }
   }
 }
 

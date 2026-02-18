@@ -5,6 +5,7 @@ import { decrypt } from "../lib/encriptacion.js";
 import {
   BinanceCredentials,
 } from "../interfaces/binance.types.js";
+import { monitorService } from '../services/servicioMonitoreo.js';
 
 interface Exchange {
   id: number;
@@ -138,6 +139,58 @@ router.post('/execute', async (req, res) => {
     console.error('Error en POST /execute:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Activar bot para un usuario (con parámetros opcionales)
+router.post('/bot/activar', async (req, res) => {
+  try {
+    const { userId, tradeAmountUSD, intervals, limit, cooldownMinutes } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId es requerido' });
+    }
+
+    const intervalArray = intervals ? (intervals as string).split(',').map(s => s.trim()) : undefined;
+
+    const activado = monitorService.activarBot(userId, {
+      tradeAmountUSD: tradeAmountUSD ? Number(tradeAmountUSD) : undefined,
+      intervals: intervalArray,
+      limit: limit ? Number(limit) : undefined,
+      cooldownMinutes: cooldownMinutes ? Number(cooldownMinutes) : undefined,
+    });
+
+    res.json({
+      success: activado,
+      message: activado ? 'Bot activado correctamente' : 'El bot ya estaba activo'
+    });
+  } catch (error: any) {
+    console.error('Error en /bot/activar:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Desactivar bot (solo userId)
+router.post('/bot/desactivar', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId es requerido' });
+    }
+
+    const desactivado = monitorService.desactivarBot(userId);
+    res.json({
+      success: desactivado,
+      message: desactivado ? 'Bot desactivado correctamente' : 'El bot no estaba activo'
+    });
+  } catch (error: any) {
+    console.error('Error en /bot/desactivar:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// (Opcional) Obtener lista de usuarios activos
+router.get('/bot/activos', (req, res) => {
+  const activos = monitorService.obtenerUsuariosActivos();
+  res.json({ usuarios: activos });
 });
 
 export default router;
