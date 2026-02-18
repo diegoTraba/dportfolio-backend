@@ -2346,8 +2346,26 @@ class BinanceService {
 
           // 4. Ejecutar ventas individuales para cada compra
           for (const compra of compras) {
-            const cantidadAVender = compra.cantidad;
-
+            const cantidadOriginal = compra.cantidad;
+            const stepSize = symbolInfo.stepSize || 1;
+            const minQty = symbolInfo.minQty || 0;
+          
+            // Redondear hacia abajo al múltiplo de stepSize más cercano
+            let cantidadAVender = Math.floor(cantidadOriginal / stepSize) * stepSize;
+          
+            // Si la cantidad redondeada es menor que el mínimo permitido, omitir esta compra
+            if (cantidadAVender < minQty) {
+              console.log(`⚠️ Cantidad redondeada ${cantidadAVender} < minQty (${minQty}) para ${symbol}. Omitiendo compra ${compra.id}.`);
+              results.push({
+                symbol,
+                side: "SELL",
+                success: false,
+                skipped: true,
+                reason: `Cantidad redondeada insuficiente (${cantidadAVender} < ${minQty})`,
+                confidence: combinedSignal.confidence,
+              });
+              continue;
+            }
             //valor mínimo de venta ---
             const valorVenta = cantidadAVender * currentPrice;
             const minNotional = symbolInfo.minNotional || 0;
