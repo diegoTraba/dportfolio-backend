@@ -2349,13 +2349,20 @@ class BinanceService {
             const cantidadOriginal = compra.cantidad;
             const stepSize = symbolInfo.stepSize || 1;
             const minQty = symbolInfo.minQty || 0;
-          
+
             // Redondear hacia abajo al múltiplo de stepSize más cercano
-            let cantidadAVender = Math.floor(cantidadOriginal / stepSize) * stepSize;
-          
+            let cantidadAVender =
+              Math.floor(cantidadOriginal / stepSize) * stepSize;
+
+            // --- NUEVO: Ajustar precisión decimal ---
+            const precision = stepSize.toString().split(".")[1]?.length || 0;
+            cantidadAVender = parseFloat(cantidadAVender.toFixed(precision));
+
             // Si la cantidad redondeada es menor que el mínimo permitido, omitir esta compra
             if (cantidadAVender < minQty) {
-              console.log(`⚠️ Cantidad redondeada ${cantidadAVender} < minQty (${minQty}) para ${symbol}. Omitiendo compra ${compra.id}.`);
+              console.log(
+                `⚠️ Cantidad redondeada ${cantidadAVender} < minQty (${minQty}) para ${symbol}. Omitiendo compra ${compra.id}.`
+              );
               results.push({
                 symbol,
                 side: "SELL",
