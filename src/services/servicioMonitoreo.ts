@@ -179,7 +179,7 @@ export class ServicioMonitoreo {
 
         const precios = await this.obtenerMultiplesPrecios(simbolosAMonitorear);
 
-        console.log("💰 Precios obtenidos:", precios);
+        // console.log("💰 Precios obtenidos:", precios);
 
         // Guardar precios en la base de datos
         await this.guardarPreciosEnBD(precios);
