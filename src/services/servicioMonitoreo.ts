@@ -765,20 +765,20 @@ export class ServicioMonitoreo {
         console.log(`✅ Bot ejecutado para usuario ${userId}. Resultado:`, result);
   
         // Opcional: notificar vía WebSocket
-        webSocketService.enviarNotificacion(userId, {
-          tipo: 'bot_ejecutado',
-          mensaje: `Bot ejecutado correctamente.`,
-          resultado: result,
-        });
+        // webSocketService.enviarNotificacion(userId, {
+        //   tipo: 'bot_ejecutado',
+        //   mensaje: `Bot ejecutado correctamente.`,
+        //   resultado: result,
+        // });
   
       } catch (error) {
         console.error(`❌ Error ejecutando bot para usuario ${userId}:`, error);
         
         // Opcional: notificar error
-        webSocketService.enviarNotificacion(userId, {
-          tipo: 'bot_error',
-          mensaje: `Error al ejecutar el bot: ${error.message}`,
-        });
+        // webSocketService.enviarNotificacion(userId, {
+        //   tipo: 'bot_error',
+        //   mensaje: `Error al ejecutar el bot: ${error.message}`,
+        // });
       }
     }
   }
