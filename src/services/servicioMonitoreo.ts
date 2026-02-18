@@ -3,6 +3,7 @@ import { getSupabaseClient } from "../lib/supabase.js";
 import { webSocketService } from "./servicioWebSocket.js";
 import { decrypt } from "../lib/encriptacion.js";
 import { servicioUsuario } from "./servicioUsuario.js";
+import { BinanceCredentials } from "../interfaces/binance.types.js";
 
 export interface DatosPrecio {
   simbolo: string;
@@ -730,6 +731,59 @@ export class ServicioMonitoreo {
     }));
   }
 
+  // private async ejecutarBotUsuariosActivos() {
+  //   if (this.usuariosBotActivos.size === 0) {
+  //     console.log("🤖 No hay usuarios con bot activo.");
+  //     return;
+  //   }
+  
+  //   console.log(`🤖 Ejecutando bot para ${this.usuariosBotActivos.size} usuario(s) activo(s)...`);
+  
+  //   const baseUrl = 'https://dportfolio-pi.vercel.app';
+  
+  //   for (const [userId, config] of this.usuariosBotActivos.entries()) {
+  //     try {
+  //       console.log(`🚀 Procesando usuario ${userId}...`);
+  
+  //       const response = await fetch(`${baseUrl}/api/atecnico/execute`, {
+  //         method: 'POST',
+  //         headers: { 'Content-Type': 'application/json' },
+  //         body: JSON.stringify({
+  //           userId,
+  //           tradeAmountUSD: config.tradeAmountUSD,
+  //           intervals: config.intervals.join(','),
+  //           limit: config.limit,
+  //           cooldownMinutes: config.cooldownMinutes,
+  //         }),
+  //       });
+  
+  //       if (!response.ok) {
+  //         const errorText = await response.text();
+  //         throw new Error(`HTTP ${response.status}: ${errorText}`);
+  //       }
+  
+  //       const result = await response.json();
+  //       console.log(`✅ Bot ejecutado para usuario ${userId}. Resultado:`, result);
+  
+  //       // Opcional: notificar vía WebSocket
+  //       // webSocketService.enviarNotificacion(userId, {
+  //       //   tipo: 'bot_ejecutado',
+  //       //   mensaje: `Bot ejecutado correctamente.`,
+  //       //   resultado: result,
+  //       // });
+  
+  //     } catch (error) {
+  //       console.error(`❌ Error ejecutando bot para usuario ${userId}:`, error);
+        
+  //       // Opcional: notificar error
+  //       // webSocketService.enviarNotificacion(userId, {
+  //       //   tipo: 'bot_error',
+  //       //   mensaje: `Error al ejecutar el bot: ${error.message}`,
+  //       // });
+  //     }
+  //   }
+  // }
+
   private async ejecutarBotUsuariosActivos() {
     if (this.usuariosBotActivos.size === 0) {
       console.log("🤖 No hay usuarios con bot activo.");
@@ -738,47 +792,55 @@ export class ServicioMonitoreo {
   
     console.log(`🤖 Ejecutando bot para ${this.usuariosBotActivos.size} usuario(s) activo(s)...`);
   
-    const baseUrl = 'https://dportfolio-pi.vercel.app';
+    const supabase = getSupabaseClient();
   
-    for (const [userId, config] of this.usuariosBotActivos.entries()) {
+    for (const userId of this.usuariosBotActivos.keys()) {
       try {
-        console.log(`🚀 Procesando usuario ${userId}...`);
+        const config = this.usuariosBotActivos.get(userId);
+        // 1. Obtener credenciales de Binance para el usuario
+        const { data: exchanges, error } = await supabase
+          .from("exchanges")
+          .select("api_key, api_secret")
+          .eq("user_id", userId)
+          .eq("exchange", "BINANCE")
+          .eq("is_active", true)
+          .limit(1);
   
-        const response = await fetch(`${baseUrl}/api/atecnico/execute`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            tradeAmountUSD: config.tradeAmountUSD,
-            intervals: config.intervals.join(','),
-            limit: config.limit,
-            cooldownMinutes: config.cooldownMinutes,
-          }),
-        });
-  
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        if (error || !exchanges || exchanges.length === 0) {
+          console.error(`❌ No se encontró exchange Binance activo para usuario ${userId}`);
+          continue;
         }
   
-        const result = await response.json();
-        console.log(`✅ Bot ejecutado para usuario ${userId}. Resultado:`, result);
+        const exchangeData = exchanges[0];
+        const decryptedApiKey = decrypt(exchangeData.api_key);
+        const decryptedApiSecret = decrypt(exchangeData.api_secret);
   
-        // Opcional: notificar vía WebSocket
-        // webSocketService.enviarNotificacion(userId, {
-        //   tipo: 'bot_ejecutado',
-        //   mensaje: `Bot ejecutado correctamente.`,
-        //   resultado: result,
-        // });
+        const credentials: BinanceCredentials = {
+          apiKey: decryptedApiKey,
+          apiSecret: decryptedApiSecret,
+        };
+  
+        // 2. Ejecutar el bot (parámetros fijos, pero podrías leer de BD si quieres)
+        const result = await binanceService.executeTrades(
+          credentials,
+          userId,
+          config.tradeAmountUSD,           // tradeAmountUSD
+          config.intervals.toString().split(',').map(s => s.trim()), // intervals
+          config.limit,           // limit
+          config.cooldownMinutes             // cooldownMinutes
+        );
+  
+        console.log(`✅ Bot ejecutado para usuario ${userId}. Operaciones: ${result.executed.length}`);
+  
+        // 3. Notificación opcional vía WebSocket
+        webSocketService.enviarNotificacion(userId, {
+          tipo: "bot_ejecutado",
+          mensaje: `Bot ejecutado. ${result.executed.filter(r => r.success).length} operaciones realizadas.`,
+          timestamp: new Date().toISOString(),
+        });
   
       } catch (error) {
         console.error(`❌ Error ejecutando bot para usuario ${userId}:`, error);
-        
-        // Opcional: notificar error
-        // webSocketService.enviarNotificacion(userId, {
-        //   tipo: 'bot_error',
-        //   mensaje: `Error al ejecutar el bot: ${error.message}`,
-        // });
       }
     }
   }

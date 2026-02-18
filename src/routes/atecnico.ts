@@ -87,59 +87,59 @@ router.get('/signals-multi', async (req, res) => {
  * - limit: número (opcional, default 50)
  * - cooldownMinutes: número (opcional, default 5)
  */
-router.post('/execute', async (req, res) => {
-  try {
-    const { userId="", tradeAmountUSD = 10, intervals = '3m,5m', limit = 50, cooldownMinutes = 5 } = req.body;
+// router.post('/execute', async (req, res) => {
+//   try {
+//     const { userId="", tradeAmountUSD = 10, intervals = '3m,5m', limit = 50, cooldownMinutes = 5 } = req.body;
     
-    const exchanges: Exchange[] =
-        await servicioUsuario.obtenerExchangesUsuario(userId, {
-          exchange: "BINANCE",
-          is_active: true,
-        });
+//     const exchanges: Exchange[] =
+//         await servicioUsuario.obtenerExchangesUsuario(userId, {
+//           exchange: "BINANCE",
+//           is_active: true,
+//         });
 
-      // Verificar si hay exchanges
-      if (!exchanges || exchanges.length === 0) {
-        return res.json({
-          totalBalance: 0,
-          connected: false,
-          exchangesCount: 0,
-          message:
-            "No se encontraron exchanges de Binance activos para este usuario",
-        });
-      }
+//       // Verificar si hay exchanges
+//       if (!exchanges || exchanges.length === 0) {
+//         return res.json({
+//           totalBalance: 0,
+//           connected: false,
+//           exchangesCount: 0,
+//           message:
+//             "No se encontraron exchanges de Binance activos para este usuario",
+//         });
+//       }
 
-      // Tomar el primer exchange del array
-      const exchange = exchanges[0];
+//       // Tomar el primer exchange del array
+//       const exchange = exchanges[0];
 
-      const decryptedApiKey = decrypt(exchange.api_key);
-      const decryptedApiSecret = decrypt(exchange.api_secret);
+//       const decryptedApiKey = decrypt(exchange.api_key);
+//       const decryptedApiSecret = decrypt(exchange.api_secret);
 
-      const credentials: BinanceCredentials = {
-        apiKey: decryptedApiKey,
-        apiSecret: decryptedApiSecret,
-      };
+//       const credentials: BinanceCredentials = {
+//         apiKey: decryptedApiKey,
+//         apiSecret: decryptedApiSecret,
+//       };
 
 
-    if (!credentials || !credentials.apiKey || !credentials.apiSecret) {
-      return res.status(400).json({ error: 'Credenciales incompletas' });
-    }
+//     if (!credentials || !credentials.apiKey || !credentials.apiSecret) {
+//       return res.status(400).json({ error: 'Credenciales incompletas' });
+//     }
 
-    const intervalArray = (intervals as string).split(',').map(s => s.trim());
-    const result = await binanceService.executeTrades(
-      credentials,
-      userId,
-      Number(tradeAmountUSD),
-      intervalArray,
-      Number(limit),
-      Number(cooldownMinutes)
-    );
+//     const intervalArray = (intervals as string).split(',').map(s => s.trim());
+//     const result = await binanceService.executeTrades(
+//       credentials,
+//       userId,
+//       Number(tradeAmountUSD),
+//       intervalArray,
+//       Number(limit),
+//       Number(cooldownMinutes)
+//     );
     
-    res.json(result);
-  } catch (error: any) {
-    console.error('Error en POST /execute:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+//     res.json(result);
+//   } catch (error: any) {
+//     console.error('Error en POST /execute:', error);
+//     res.status(500).json({ error: error.message });
+//   }
+// });
 
 // Activar bot para un usuario (con parámetros opcionales)
 router.post('/bot/activar', async (req, res) => {
