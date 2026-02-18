@@ -39,7 +39,7 @@ export const SUPPORTED_SYMBOLS = [
   "AVAXUSDC",
   "LINKUSDC",
   "DOGEUSDC",
-  "PEPEUSDC"
+  "PEPEUSDC",
 ];
 
 import { getSupabaseClient } from "../lib/supabase.js";
@@ -2094,25 +2094,40 @@ class BinanceService {
           );
 
           const currentPrice = await this.getPrice(symbol);
-          const quantityBase = tradeAmountUSD / currentPrice;
+          const symbolInfo = await this.getSymbolInfo(credentials, symbol);
+          const minNotional = symbolInfo.minNotional || 5; // valor por defecto si no viene
+
+          // 2. Ajustar el monto de compra si es menor que minNotional
+          let montoCompra = tradeAmountUSD;
+          if (montoCompra < minNotional) {
+            console.log(
+              `⚠️ tradeAmountUSD (${montoCompra}) es menor que minNotional (${minNotional}) para ${symbol}. Usando ${minNotional}`
+            );
+            montoCompra = minNotional;
+          }
+          const quantityBase = montoCompra / currentPrice;
           const rangoInferior = currentPrice * 0.996;
           const rangoSuperior = currentPrice * 1.004;
 
           // --- NUEVA VERIFICACIÓN: compra existente en rango ±0.4% ---
           const supabase = getSupabaseClient();
-          const { data: compraExistente, error: errorExistente } = await supabase
-            .from("compras")
-            .select("id, precio")
-            .eq("simbolo", symbol)
-            .eq("idUsuario", userId)
-            .eq("botS", true)
-            .eq("vendida", false)
-            .gte("precio", rangoInferior)
-            .lte("precio", rangoSuperior)
-            .limit(1);
+          const { data: compraExistente, error: errorExistente } =
+            await supabase
+              .from("compras")
+              .select("id, precio")
+              .eq("simbolo", symbol)
+              .eq("idUsuario", userId)
+              .eq("botS", true)
+              .eq("vendida", false)
+              .gte("precio", rangoInferior)
+              .lte("precio", rangoSuperior)
+              .limit(1);
 
           if (errorExistente) {
-            console.error("⚠️ Error verificando compras existentes:", errorExistente);
+            console.error(
+              "⚠️ Error verificando compras existentes:",
+              errorExistente
+            );
             results.push({
               symbol,
               side: "BUY",
@@ -2164,7 +2179,7 @@ class BinanceService {
           );
           const buyResult = await this.placeBuyOrder(credentials, {
             symbol,
-            quoteOrderQty: tradeAmountUSD,
+            quoteOrderQty: montoCompra,
             type: "MARKET",
           });
 
