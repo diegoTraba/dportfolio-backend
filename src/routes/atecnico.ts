@@ -1,5 +1,17 @@
 import express from 'express';
 import { binanceService } from "../services/servicioBinance.js";
+import { servicioUsuario } from "../services/servicioUsuario.js";
+import { decrypt } from "../lib/encriptacion.js";
+import {
+  BinanceCredentials,
+} from "../interfaces/binance.types.js";
+
+interface Exchange {
+  id: number;
+  exchange: string;
+  api_key: string;
+  api_secret: string;
+}
 
 const router = express.Router();
 
@@ -76,8 +88,37 @@ router.get('/signals-multi', async (req, res) => {
  */
 router.post('/execute', async (req, res) => {
   try {
-    const { credentials, userId="", tradeAmountUSD = 10, intervals = '3m,5m', limit = 50, cooldownMinutes = 5 } = req.body;
+    const { userId="", tradeAmountUSD = 10, intervals = '3m,5m', limit = 50, cooldownMinutes = 5 } = req.body;
     
+    const exchanges: Exchange[] =
+        await servicioUsuario.obtenerExchangesUsuario(userId, {
+          exchange: "BINANCE",
+          is_active: true,
+        });
+
+      // Verificar si hay exchanges
+      if (!exchanges || exchanges.length === 0) {
+        return res.json({
+          totalBalance: 0,
+          connected: false,
+          exchangesCount: 0,
+          message:
+            "No se encontraron exchanges de Binance activos para este usuario",
+        });
+      }
+
+      // Tomar el primer exchange del array
+      const exchange = exchanges[0];
+
+      const decryptedApiKey = decrypt(exchange.api_key);
+      const decryptedApiSecret = decrypt(exchange.api_secret);
+
+      const credentials: BinanceCredentials = {
+        apiKey: decryptedApiKey,
+        apiSecret: decryptedApiSecret,
+      };
+
+
     if (!credentials || !credentials.apiKey || !credentials.apiSecret) {
       return res.status(400).json({ error: 'Credenciales incompletas' });
     }
