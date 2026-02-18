@@ -2036,6 +2036,7 @@ class BinanceService {
       skipped?: boolean;
       reason?: string;
       dbSaved?: boolean;
+      confidence: number;
     }[];
   }> {
     const results: {
@@ -2047,6 +2048,7 @@ class BinanceService {
       skipped?: boolean;
       reason?: string;
       dbSaved?: boolean;
+      confidence: number;
     }[] = [];
     const cooldownMs = cooldownMinutes * 60 * 1000;
 
@@ -2076,6 +2078,7 @@ class BinanceService {
             success: false,
             skipped: true,
             reason: `Cooldown activo (espera ${minsLeft} min)`,
+            confidence: combinedSignal.confidence,
           });
           continue;
         }
@@ -2114,6 +2117,7 @@ class BinanceService {
               side: "BUY",
               success: false,
               error: "Error al verificar compras previas",
+              confidence: combinedSignal.confidence,
             });
             continue;
           }
@@ -2128,6 +2132,7 @@ class BinanceService {
               success: false,
               skipped: true,
               reason: "Compra existente en rango de precio cercano",
+              confidence: combinedSignal.confidence,
             });
             continue;
           }
@@ -2148,6 +2153,7 @@ class BinanceService {
               side: "BUY",
               success: false,
               error: `Saldo insuficiente de ${availability.quoteAsset}`,
+              confidence: combinedSignal.confidence,
             });
             continue;
           }
@@ -2225,6 +2231,7 @@ class BinanceService {
               success: true,
               order: buyResult.order,
               dbSaved,
+              confidence: combinedSignal.confidence,
             });
           } else {
             console.error(`❌ Error en compra de ${symbol}:`, buyResult.error);
@@ -2233,6 +2240,7 @@ class BinanceService {
               side: "BUY",
               success: false,
               error: buyResult.error,
+              confidence: combinedSignal.confidence,
             });
           }
         }
@@ -2264,6 +2272,7 @@ class BinanceService {
               side: "SELL",
               success: false,
               error: `Balance insuficiente de ${availability.baseAsset}`,
+              confidence: combinedSignal.confidence,
             });
             continue;
           }
@@ -2289,6 +2298,7 @@ class BinanceService {
               side: "SELL",
               success: false,
               error: "No hay compras rentables para vender",
+              confidence: combinedSignal.confidence,
             });
             continue;
           }
@@ -2312,6 +2322,7 @@ class BinanceService {
               success: false,
               error:
                 "Balance insuficiente para vender todas las compras elegibles",
+              confidence: combinedSignal.confidence,
             });
             continue;
           }
@@ -2337,6 +2348,7 @@ class BinanceService {
                 side: "SELL",
                 success: false,
                 error: sellCheck.reasons?.join(", "),
+                confidence: combinedSignal.confidence,
               });
               continue; // pasar a la siguiente compra
             }
@@ -2454,6 +2466,7 @@ class BinanceService {
                 success: true,
                 order: sellResult.order,
                 dbSaved,
+                confidence: combinedSignal.confidence,
               });
             } else {
               console.error(
@@ -2465,6 +2478,7 @@ class BinanceService {
                 side: "SELL",
                 success: false,
                 error: sellResult.error,
+                confidence: combinedSignal.confidence,
               });
               // Si falla una orden, detenemos el proceso para este símbolo (podría afectar el balance)
               break;
