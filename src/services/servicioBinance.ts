@@ -2269,6 +2269,7 @@ class BinanceService {
 
           // Obtener precio actual y calcular umbral (0.5% por debajo)
           const currentPrice = await this.getPrice(symbol);
+          const symbolInfo = await this.getSymbolInfo(credentials, symbol);
           const umbral = currentPrice * 0.995; // precio de compra debe ser menor a este valor
 
           // 1. Obtener balance disponible del activo base
@@ -2347,6 +2348,29 @@ class BinanceService {
           for (const compra of compras) {
             const cantidadAVender = compra.cantidad;
 
+            //valor mínimo de venta ---
+            const valorVenta = cantidadAVender * currentPrice;
+            const minNotional = symbolInfo.minNotional || 0;
+            if (valorVenta < minNotional) {
+              console.log(
+                `⚠️ Valor de venta ${valorVenta.toFixed(
+                  2
+                )} es menor que minNotional (${minNotional}) para ${symbol}. Omitiendo compra ${
+                  compra.id
+                }.`
+              );
+              results.push({
+                symbol,
+                side: "SELL",
+                success: false,
+                skipped: true,
+                reason: `Valor de venta (${valorVenta.toFixed(
+                  2
+                )}) menor que mínimo (${minNotional})`,
+                confidence: combinedSignal.confidence,
+              });
+              continue;
+            }
             // Verificar que la cantidad sea válida según los filtros de Binance (step size, minNotional, etc.)
             const sellCheck = await this.checkSellAvailability(
               credentials,
