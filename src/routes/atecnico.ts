@@ -193,4 +193,24 @@ router.get('/bot/activos', (req, res) => {
   res.json({ usuarios: activos });
 });
 
+// Obtener estado del bot para un usuario específico
+router.get('/bot/estado/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId es requerido' });
+    }
+    const activos = monitorService.obtenerUsuariosActivos();
+    const usuario = activos.find(u => u.userId === userId);
+    if (usuario) {
+      res.json({ activo: true, config: usuario.config });
+    } else {
+      res.json({ activo: false });
+    }
+  } catch (error: any) {
+    console.error('Error en /bot/estado/:userId:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
