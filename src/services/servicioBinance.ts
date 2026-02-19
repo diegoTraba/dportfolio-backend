@@ -2473,8 +2473,7 @@ class BinanceService {
                   : cantidadAVender * precioVentaReal;
 
                 // Calcular beneficio
-                const totalCompra =
-                  compra.total || compra.precio * cantidadAVender;
+                const totalCompra = compra.precio * cantidadAVender;
                 const beneficio = totalVentaReal - totalCompra;
                 const porcentajeBeneficio = (beneficio / totalCompra) * 100;
 
