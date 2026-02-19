@@ -14,6 +14,7 @@ export interface DatosPrecio {
 interface BotConfig {
   tradeAmountUSD: number;
   intervals: string[];
+  simbolos: string[];   // <-- Nuevo campo
   limit: number;
   cooldownMinutes: number;
 }
@@ -706,11 +707,12 @@ export class ServicioMonitoreo {
       console.log(`⚠️ El bot ya está activo para el usuario ${userId}`);
       return false;
     }
-    
-    // Valores por defecto
+  
+    // Valores por defecto incluyendo simbolos (vacío por defecto)
     const configCompleta: BotConfig = {
       tradeAmountUSD: config.tradeAmountUSD ?? 10,
       intervals: config.intervals ?? ['3m', '5m'],
+      simbolos: config.simbolos ?? [],  // <-- Se guarda la lista de símbolos
       limit: config.limit ?? 50,
       cooldownMinutes: config.cooldownMinutes ?? 5,
     };
@@ -797,7 +799,9 @@ export class ServicioMonitoreo {
     for (const userId of this.usuariosBotActivos.keys()) {
       try {
         const config = this.usuariosBotActivos.get(userId);
-        // 1. Obtener credenciales de Binance para el usuario
+        if (!config) continue;
+  
+        // Obtener credenciales de Binance
         const { data: exchanges, error } = await supabase
           .from("exchanges")
           .select("api_key, api_secret")
@@ -820,19 +824,20 @@ export class ServicioMonitoreo {
           apiSecret: decryptedApiSecret,
         };
   
-        // 2. Ejecutar el bot (parámetros fijos, pero podrías leer de BD si quieres)
+        // Ejecutar el bot con la configuración completa, incluyendo símbolos
         const result = await binanceService.executeTrades(
           credentials,
           userId,
-          config.tradeAmountUSD,           // tradeAmountUSD
-          config.intervals.toString().split(',').map(s => s.trim()), // intervals
-          config.limit,           // limit
-          config.cooldownMinutes             // cooldownMinutes
+          config.tradeAmountUSD,
+          config.intervals,        // Ya es un array, no necesita conversión
+          config.simbolos,         // <-- Se pasa la lista de símbolos seleccionados
+          config.limit,
+          config.cooldownMinutes
         );
   
         console.log(`✅ Bot ejecutado para usuario ${userId}. Operaciones: ${result.executed.length}`);
   
-        // 3. Notificación opcional vía WebSocket
+        // Notificación vía WebSocket
         webSocketService.enviarNotificacion(userId, {
           tipo: "bot_ejecutado",
           mensaje: `Bot ejecutado. ${result.executed.filter(r => r.success).length} operaciones realizadas.`,

@@ -144,16 +144,18 @@ router.get('/signals-multi', async (req, res) => {
 // Activar bot para un usuario (con parámetros opcionales)
 router.post('/bot/activar', async (req, res) => {
   try {
-    const { userId, tradeAmountUSD, intervals, limit, cooldownMinutes } = req.body;
+    const { userId, tradeAmountUSD, intervals, simbolos, limit, cooldownMinutes } = req.body;
     if (!userId) {
       return res.status(400).json({ error: 'userId es requerido' });
     }
 
     const intervalArray = intervals ? (intervals as string).split(',').map(s => s.trim()) : undefined;
+    const simbolosArray = simbolos ? (simbolos as string).split(',').map(s => s.trim()) : undefined;
 
     const activado = monitorService.activarBot(userId, {
       tradeAmountUSD: tradeAmountUSD ? Number(tradeAmountUSD) : undefined,
       intervals: intervalArray,
+      simbolos: simbolosArray,
       limit: limit ? Number(limit) : undefined,
       cooldownMinutes: cooldownMinutes ? Number(cooldownMinutes) : undefined,
     });

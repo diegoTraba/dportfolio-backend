@@ -1991,7 +1991,8 @@ class BinanceService {
    */
   async getAllTechnicalSignalsMulti(
     intervals: string[] = ["3m", "5m"],
-    limit: number = 100
+    limit: number = 100,
+    simbolos: string[] = SUPPORTED_SYMBOLS
   ): Promise<
     Array<{
       symbol: string;
@@ -2000,7 +2001,7 @@ class BinanceService {
       combinedSignal: { action: "BUY" | "SELL" | "NONE"; confidence: number };
     }>
   > {
-    const promises = SUPPORTED_SYMBOLS.map(async (symbol) => {
+    const promises = simbolos.map(async (symbol) => {
       try {
         return await this.getTechnicalSignalsMulti(symbol, intervals, limit);
       } catch (error) {
@@ -2025,6 +2026,7 @@ class BinanceService {
     userId: string,
     tradeAmountUSD: number = 10,
     intervals: string[] = ["3m", "5m"],
+    simbolos: string[] = SUPPORTED_SYMBOLS,
     limit: number = 50,
     cooldownMinutes: number = 3
   ): Promise<{
@@ -2057,7 +2059,8 @@ class BinanceService {
       // Obtener señales combinadas para todos los símbolos
       const allSignals = await this.getAllTechnicalSignalsMulti(
         intervals,
-        limit
+        limit,
+        simbolos
       );
 
       for (const signal of allSignals) {
