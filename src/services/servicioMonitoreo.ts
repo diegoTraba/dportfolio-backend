@@ -4,6 +4,7 @@ import { webSocketService } from "./servicioWebSocket.js";
 import { decrypt } from "../lib/encriptacion.js";
 import { servicioUsuario } from "./servicioUsuario.js";
 import { BinanceCredentials } from "../interfaces/binance.types.js";
+import { randomUUID } from 'crypto';
 
 export interface DatosPrecio {
   simbolo: string;
@@ -839,9 +840,12 @@ export class ServicioMonitoreo {
   
         // Notificación vía WebSocket
         webSocketService.enviarNotificacion(userId, {
+          id: randomUUID(),
+          titulo: "Bot ejecutado",
           tipo: "bot_ejecutado",
           mensaje: `Bot ejecutado. ${result.executed.filter(r => r.success).length} operaciones realizadas.`,
-          timestamp: new Date().toISOString(),
+          fecha: new Date().toISOString(),
+          leida: false,
         });
   
       } catch (error) {
