@@ -484,8 +484,7 @@ export class ServicioMonitoreo {
               comision: parseFloat(trade.commission),
               fechaCompra: new Date(trade.time).toISOString(),
               vendida: false,
-              idUsuario: userId,
-              fechaActualizacion: new Date().toISOString(),
+              idUsuario: userId
             };
 
             if (compraExistente) {
