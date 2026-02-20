@@ -2377,7 +2377,7 @@ class BinanceService {
               continue;
             }
             //valor mínimo de venta ---
-            const valorVenta = cantidadAVender * currentPrice;
+            let valorVenta = cantidadAVender * currentPrice;
             const minNotional = symbolInfo.minNotional || 0;
             if (valorVenta < minNotional) {
               console.log(
@@ -2400,25 +2400,70 @@ class BinanceService {
               continue;
             }
             // Verificar que la cantidad sea válida según los filtros de Binance (step size, minNotional, etc.)
-            const sellCheck = await this.checkSellAvailability(
-              credentials,
-              symbol,
-              cantidadAVender,
-              currentPrice
-            );
-            if (!sellCheck.canSell) {
+            // const sellCheck = await this.checkSellAvailability(
+            //   credentials,
+            //   symbol,
+            //   cantidadAVender,
+            //   currentPrice
+            // );
+            // if (!sellCheck.canSell) {
+            //   console.log(
+            //     `❌ No se puede vender ${cantidadAVender} de ${symbol} (compra ${compra.id}):`,
+            //     sellCheck.reasons
+            //   );
+            //   results.push({
+            //     symbol,
+            //     side: "SELL",
+            //     success: false,
+            //     error: sellCheck.reasons?.join(", "),
+            //     confidence: combinedSignal.confidence,
+            //   });
+            //   continue; // pasar a la siguiente compra
+            // }
+
+            // --- NUEVO: Obtener precio actual justo antes de vender ---
+            const currentPriceBeforeSell = await this.getPrice(symbol);
+
+            // Calcular precio mínimo aceptable (0.5% por encima del precio de compra)
+            const minAcceptablePrice = compra.precio * 1.005; // 0.5% más
+
+            // Verificar que el precio actual sea al menos 0.5% superior al precio de compra
+            if (currentPriceBeforeSell < minAcceptablePrice) {
               console.log(
-                `❌ No se puede vender ${cantidadAVender} de ${symbol} (compra ${compra.id}):`,
-                sellCheck.reasons
+                `⚠️ Precio actual ${currentPriceBeforeSell} es inferior al mínimo aceptable (${minAcceptablePrice}) para compra ${compra.id} (precio compra: ${compra.precio}). Venta cancelada.`
               );
               results.push({
                 symbol,
                 side: "SELL",
                 success: false,
-                error: sellCheck.reasons?.join(", "),
+                skipped: true,
+                reason: `Precio insuficiente (actual ${currentPriceBeforeSell} < ${minAcceptablePrice})`,
                 confidence: combinedSignal.confidence,
               });
-              continue; // pasar a la siguiente compra
+              continue; // Pasar a la siguiente compra
+            }
+
+            // Validar minNotional con el precio actualizado
+            valorVenta = cantidadAVender * currentPriceBeforeSell;
+            if (valorVenta < minNotional) {
+              console.log(
+                `⚠️ Valor de venta ${valorVenta.toFixed(
+                  2
+                )} es menor que minNotional (${minNotional}) para ${symbol}. Omitiendo compra ${
+                  compra.id
+                }.`
+              );
+              results.push({
+                symbol,
+                side: "SELL",
+                success: false,
+                skipped: true,
+                reason: `Valor de venta (${valorVenta.toFixed(
+                  2
+                )}) menor que mínimo (${minNotional})`,
+                confidence: combinedSignal.confidence,
+              });
+              continue;
             }
 
             console.log(
