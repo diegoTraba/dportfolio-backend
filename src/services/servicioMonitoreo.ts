@@ -187,7 +187,7 @@ export class ServicioMonitoreo {
           "BNBUSDC",
           "LINKUSDC",
         ];
-        console.log("📊 Símbolos a monitorear:", simbolosAMonitorear);
+        // console.log("📊 Símbolos a monitorear:", simbolosAMonitorear);
 
         const precios = await this.obtenerMultiplesPrecios(simbolosAMonitorear);
 
@@ -732,60 +732,7 @@ export class ServicioMonitoreo {
       config,
     }));
   }
-
-  // private async ejecutarBotUsuariosActivos() {
-  //   if (this.usuariosBotActivos.size === 0) {
-  //     console.log("🤖 No hay usuarios con bot activo.");
-  //     return;
-  //   }
   
-  //   console.log(`🤖 Ejecutando bot para ${this.usuariosBotActivos.size} usuario(s) activo(s)...`);
-  
-  //   const baseUrl = 'https://dportfolio-pi.vercel.app';
-  
-  //   for (const [userId, config] of this.usuariosBotActivos.entries()) {
-  //     try {
-  //       console.log(`🚀 Procesando usuario ${userId}...`);
-  
-  //       const response = await fetch(`${baseUrl}/api/atecnico/execute`, {
-  //         method: 'POST',
-  //         headers: { 'Content-Type': 'application/json' },
-  //         body: JSON.stringify({
-  //           userId,
-  //           tradeAmountUSD: config.tradeAmountUSD,
-  //           intervals: config.intervals.join(','),
-  //           limit: config.limit,
-  //           cooldownMinutes: config.cooldownMinutes,
-  //         }),
-  //       });
-  
-  //       if (!response.ok) {
-  //         const errorText = await response.text();
-  //         throw new Error(`HTTP ${response.status}: ${errorText}`);
-  //       }
-  
-  //       const result = await response.json();
-  //       console.log(`✅ Bot ejecutado para usuario ${userId}. Resultado:`, result);
-  
-  //       // Opcional: notificar vía WebSocket
-  //       // webSocketService.enviarNotificacion(userId, {
-  //       //   tipo: 'bot_ejecutado',
-  //       //   mensaje: `Bot ejecutado correctamente.`,
-  //       //   resultado: result,
-  //       // });
-  
-  //     } catch (error) {
-  //       console.error(`❌ Error ejecutando bot para usuario ${userId}:`, error);
-        
-  //       // Opcional: notificar error
-  //       // webSocketService.enviarNotificacion(userId, {
-  //       //   tipo: 'bot_error',
-  //       //   mensaje: `Error al ejecutar el bot: ${error.message}`,
-  //       // });
-  //     }
-  //   }
-  // }
-
   private async ejecutarBotUsuariosActivos() {
     if (this.usuariosBotActivos.size === 0) {
       console.log("🤖 No hay usuarios con bot activo.");
