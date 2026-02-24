@@ -248,16 +248,9 @@ export class ServicioMonitoreo {
 
       // Verificar cada alerta
       for (const alerta of alertas) {
-        // console.log(`\n🔎 Procesando alerta ID: ${alerta.id}`);
-        // console.log(
-        //   `   Cripto: ${alerta.criptomoneda}, Condición: ${alerta.condicion}, Objetivo: $${alerta.precio_objetivo}`
-        // );
 
         const simbolo = `${alerta.criptomoneda}USDC`;
         const precioActual = precios[simbolo]?.precio;
-
-        // console.log(`   Símbolo buscado: ${simbolo}`);
-        // console.log(`   Precio actual: $${precioActual}`);
 
         if (!precioActual) {
           console.log(`   ⚠️ Precio no disponible para ${simbolo}`);
@@ -271,22 +264,12 @@ export class ServicioMonitoreo {
           precioActual >= alerta.precio_objetivo
         ) {
           condicionCumplida = true;
-          // console.log(
-          //   `   ✅ CONDICIÓN CUMPLIDA: ${precioActual} >= ${alerta.precio_objetivo}`
-          // );
         } else if (
           alerta.condicion === "por debajo de" &&
           precioActual <= alerta.precio_objetivo
         ) {
           condicionCumplida = true;
-          // console.log(
-          //   `   ✅ CONDICIÓN CUMPLIDA: ${precioActual} <= ${alerta.precio_objetivo}`
-          // );
-        } else {
-          // console.log(
-          //   `   ❌ Condición NO cumplida: ${precioActual} ${alerta.condicion} ${alerta.precio_objetivo}`
-          // );
-        }
+        } 
 
         if (condicionCumplida) {
           console.log(`   🚀 Activando alerta ${alerta.id}...`);
@@ -804,7 +787,7 @@ export class ServicioMonitoreo {
 
         // Notificación vía WebSocket
         webSocketService.enviarNotificacion(userId, {
-          id: randomUUID(),
+          id: "temp_"+randomUUID(),
           titulo: "Bot ejecutado",
           tipo: "bot_ejecutado",
           mensaje: `Bot ejecutado. ${
