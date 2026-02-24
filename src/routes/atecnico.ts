@@ -242,12 +242,11 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
     // Operaciones totales en últimas 24h (compras + ventas)
     const comprasUltimas24h = compras.filter(c => new Date(c.fechaCompra) >= hace24h).length;
     const ventasUltimas24h = ventas.filter(v => new Date(v.fechaVenta) >= hace24h).length;
-    const operacionesUltimas24h = comprasUltimas24h + ventasUltimas24h;
+    const operacionesUltimas24h = comprasUltimas24h + ventasUltimas24h;  
 
-    console.log("operaciones emparejadas ultimas 24h botS: "+operacionesUltimas24h);
-    
     // Emparejadas en últimas 24h: compras vendidas cuya fechaCompra está en últimas 24h
     const emparejadasUltimas24h = compras.filter(c => c.vendida && new Date(c.fechaCompra) >= hace24h).length;
+    console.log("operaciones emparejadas ultimas 24h botS: "+emparejadasUltimas24h);
 
     // Total de operaciones
     const totalOperaciones = compras.length + ventas.length;
