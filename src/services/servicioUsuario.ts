@@ -250,7 +250,7 @@ export const servicioUsuario = {
         .eq("idUsuario", userId);
   
       if (bots) {
-        query = query.eq("bots", true);
+        query = query.eq("botS", true);
       }
   
       if (fechaDesde) {
