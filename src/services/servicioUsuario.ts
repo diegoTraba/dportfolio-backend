@@ -201,7 +201,7 @@ export const servicioUsuario = {
 
       // Si bots es true, filtrar por el campo bots = true
       if (bots) {
-        query = query.eq("bots", true);
+        query = query.eq("botS", true);
       }
 
       // Si se proporciona fechaDesde, filtrar ventas posteriores o iguales
