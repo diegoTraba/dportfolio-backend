@@ -787,16 +787,15 @@ export class ServicioMonitoreo {
           `✅ Bot ejecutado para usuario ${userId}. Operaciones: ${result.executed.length}`
         );
 
+        const operacionesExitosas = result.executed.filter(r => r.success).length;
         //Solo notificamos al usuario si se ha realizado alguna operacion
-        if (result.executed.length > 0) {
+        if (operacionesExitosas > 0) {
           // Notificación vía WebSocket
           webSocketService.enviarNotificacion(userId, {
             id: "temp_" + randomUUID(),
             titulo: "Bot ejecutado",
             tipo: "bot_ejecutado",
-            mensaje: `Bot ejecutado. ${
-              result.executed.filter((r) => r.success).length
-            } operaciones realizadas.`,
+            mensaje: `Bot ejecutado. ${operacionesExitosas} operaciones realizadas.`,
             fecha: new Date().toISOString(),
             leida: false,
           });
