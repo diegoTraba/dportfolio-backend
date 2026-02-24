@@ -78,16 +78,7 @@ router.get('/signals-multi', async (req, res) => {
   }
 });
 
-/**
- * Ejecuta órdenes automáticas basadas en señales técnicas
- * Espera un body con:
- * - credentials: { apiKey, apiSecret }
- * - tradeAmountUSD: número (opcional, default 10)
- * - intervals: string (opcional, default "3m,5m")
- * - limit: número (opcional, default 50)
- * - cooldownMinutes: número (opcional, default 5)
- */
-// router.post('/execute', async (req, res) => {
+
 //   try {
 //     const { userId="", tradeAmountUSD = 10, intervals = '3m,5m', limit = 50, cooldownMinutes = 5 } = req.body;
     
@@ -211,6 +202,40 @@ router.get('/bot/estado/:userId', (req, res) => {
     }
   } catch (error: any) {
     console.error('Error en /bot/estado/:userId:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Obtener operaciones (compras y ventas) del bot de un usuario desde su activación
+router.get('/bot/operaciones/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId es requerido' });
+    }
+
+    const config = monitorService.obtenerConfigUsuario(userId);
+    if (!config || !config.fechaActivacion) {
+      return res.status(404).json({ error: 'El bot no está activo o no tiene fecha de activación' });
+    }
+
+    // Obtener compras y ventas del bot desde la fecha de activación
+    const [compras, ventas] = await Promise.all([
+      servicioUsuario.obtenerComprasUsuario(userId, true, config.fechaActivacion),
+      servicioUsuario.obtenerVentasUsuario(userId, true, config.fechaActivacion)
+    ]);
+
+    const totalOperaciones = compras.length + ventas.length;
+
+    res.json({
+      userId,
+      fechaActivacion: config.fechaActivacion,
+      compras: compras.length,
+      ventas: ventas.length,
+      totalOperaciones
+    });
+  } catch (error: any) {
+    console.error('Error en /bot/operaciones/:userId:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -86,7 +86,7 @@ export const servicioUsuario = {
       .from("exchanges")
       .select("*", { count: "exact", head: true })
       .eq("user_id", userId)
-      .eq("is_active",true);
+      .eq("is_active", true);
 
     if (error) {
       throw new Error(
@@ -178,31 +178,97 @@ export const servicioUsuario = {
       throw error;
     }
   },
-  obtenerVentasUsuario: async (userId: string): Promise<any[]> => {
+  obtenerVentasUsuario: async (
+    userId: string,
+    bots: boolean = false,
+    fechaDesde?: string // Nuevo parámetro opcional
+  ): Promise<any[]> => {
     try {
       console.log(`📊 Obteniendo ventas para usuario ID: ${userId}`);
-      
+
       const supabase = getSupabaseClient();
-  
+
       // Consulta a la tabla ventas filtrando por idUsuario
-      const { data: ventas, error } = await supabase
-      .from("ventas")
-      .select(`
-        *,
-        compras:compras(*)
-      `)
-      .eq("idUsuario", userId)
-      .order("fechaVenta", { ascending: false });
-  
+      let query = supabase
+        .from("ventas")
+        .select(
+          `
+          *,
+          compras:compras(*)
+        `
+        )
+        .eq("idUsuario", userId);
+
+      // Si bots es true, filtrar por el campo bots = true
+      if (bots) {
+        query = query.eq("bots", true);
+      }
+
+      // Si se proporciona fechaDesde, filtrar ventas posteriores o iguales
+      if (fechaDesde) {
+        query = query.gte("fechaVenta", fechaDesde);
+      }
+
+      // Ejecutar consulta con orden
+      const { data: ventas, error } = await query.order("fechaVenta", {
+        ascending: false,
+      });
+
       if (error) {
         throw new Error(`Error al obtener ventas: ${error.message}`);
       }
-  
-      console.log(`✅ Encontradas ${ventas?.length || 0} ventas para usuario ID: ${userId}`);
-      
+
+      console.log(
+        `✅ Encontradas ${
+          ventas?.length || 0
+        } ventas para usuario ID: ${userId}`
+      );
+
       return ventas || [];
     } catch (error) {
-      console.error(`💥 Error al obtener ventas para usuario ${userId}:`, error);
+      console.error(
+        `💥 Error al obtener ventas para usuario ${userId}:`,
+        error
+      );
+      throw error;
+    }
+  },
+
+  obtenerComprasUsuario: async (
+    userId: string,
+    bots: boolean = false,
+    fechaDesde?: string
+  ): Promise<any[]> => {
+    try {
+      console.log(`📊 Obteniendo compras para usuario ID: ${userId}`);
+  
+      const supabase = getSupabaseClient();
+  
+      let query = supabase
+        .from("compras")
+        .select("*")
+        .eq("idUsuario", userId)
+        .eq("vendida", false);
+  
+      if (bots) {
+        query = query.eq("bots", true);
+      }
+  
+      if (fechaDesde) {
+        query = query.gte("fechaCompra", fechaDesde);
+      }
+  
+      const { data: compras, error } = await query.order("fechaCompra", {
+        ascending: false,
+      });
+  
+      if (error) {
+        throw new Error(`Error al obtener compras: ${error.message}`);
+      }
+  
+      return compras || [];
+    } catch (error) {
+      console.error(`💥 Error al obtener compras para usuario ${userId}:`, error);
       throw error;
     }
   },

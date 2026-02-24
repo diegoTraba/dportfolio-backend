@@ -4,7 +4,7 @@ import { webSocketService } from "./servicioWebSocket.js";
 import { decrypt } from "../lib/encriptacion.js";
 import { servicioUsuario } from "./servicioUsuario.js";
 import { BinanceCredentials } from "../interfaces/binance.types.js";
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
 export interface DatosPrecio {
   simbolo: string;
@@ -15,9 +15,10 @@ export interface DatosPrecio {
 interface BotConfig {
   tradeAmountUSD: number;
   intervals: string[];
-  simbolos: string[];   // <-- Nuevo campo
+  simbolos: string[]; // <-- Nuevo campo
   limit: number;
   cooldownMinutes: number;
+  fechaActivacion?: string;
 }
 
 export interface CompraUsuario {
@@ -29,7 +30,6 @@ export interface CompraUsuario {
   fecha_compra: string;
   // Puedes añadir más campos según tu esquema
 }
-
 
 export class ServicioMonitoreo {
   private estaMonitoreando: boolean = false;
@@ -484,7 +484,7 @@ export class ServicioMonitoreo {
               comision: parseFloat(trade.commission),
               fechaCompra: new Date(trade.time).toISOString(),
               vendida: false,
-              idUsuario: userId
+              idUsuario: userId,
             };
 
             if (compraExistente) {
@@ -707,47 +707,61 @@ export class ServicioMonitoreo {
       console.log(`⚠️ El bot ya está activo para el usuario ${userId}`);
       return false;
     }
-  
+
     // Valores por defecto incluyendo simbolos (vacío por defecto)
     const configCompleta: BotConfig = {
       tradeAmountUSD: config.tradeAmountUSD ?? 10,
-      intervals: config.intervals ?? ['3m', '5m'],
-      simbolos: config.simbolos ?? [],  // <-- Se guarda la lista de símbolos
+      intervals: config.intervals ?? ["3m", "5m"],
+      simbolos: config.simbolos ?? [], // <-- Se guarda la lista de símbolos
       limit: config.limit ?? 50,
       cooldownMinutes: config.cooldownMinutes ?? 5,
+      fechaActivacion: new Date().toISOString(),
     };
-  
+
     this.usuariosBotActivos.set(userId, configCompleta);
-    console.log(`✅ Bot activado para el usuario ${userId} con configuración:`, configCompleta);
+    console.log(
+      `✅ Bot activado para el usuario ${userId} con configuración:`,
+      configCompleta
+    );
     return true;
   }
-  
+
   desactivarBot(userId: string): boolean {
     return this.usuariosBotActivos.delete(userId);
   }
-  
+
   obtenerUsuariosActivos(): { userId: string; config: BotConfig }[] {
-    return Array.from(this.usuariosBotActivos.entries()).map(([userId, config]) => ({
-      userId,
-      config,
-    }));
+    return Array.from(this.usuariosBotActivos.entries()).map(
+      ([userId, config]) => ({
+        userId,
+        config,
+      })
+    );
   }
-  
+
+  // Obtener configuración del bot para un usuario específico
+  obtenerConfigUsuario(userId: string): BotConfig | null {
+    const config = this.usuariosBotActivos.get(userId);
+    return config ? { ...config } : null;
+  }
+
   private async ejecutarBotUsuariosActivos() {
     if (this.usuariosBotActivos.size === 0) {
       console.log("🤖 No hay usuarios con bot activo.");
       return;
     }
-  
-    console.log(`🤖 Ejecutando bot para ${this.usuariosBotActivos.size} usuario(s) activo(s)...`);
-  
+
+    console.log(
+      `🤖 Ejecutando bot para ${this.usuariosBotActivos.size} usuario(s) activo(s)...`
+    );
+
     const supabase = getSupabaseClient();
-  
+
     for (const userId of this.usuariosBotActivos.keys()) {
       try {
         const config = this.usuariosBotActivos.get(userId);
         if (!config) continue;
-  
+
         // Obtener credenciales de Binance
         const { data: exchanges, error } = await supabase
           .from("exchanges")
@@ -756,44 +770,49 @@ export class ServicioMonitoreo {
           .eq("exchange", "BINANCE")
           .eq("is_active", true)
           .limit(1);
-  
+
         if (error || !exchanges || exchanges.length === 0) {
-          console.error(`❌ No se encontró exchange Binance activo para usuario ${userId}`);
+          console.error(
+            `❌ No se encontró exchange Binance activo para usuario ${userId}`
+          );
           continue;
         }
-  
+
         const exchangeData = exchanges[0];
         const decryptedApiKey = decrypt(exchangeData.api_key);
         const decryptedApiSecret = decrypt(exchangeData.api_secret);
-  
+
         const credentials: BinanceCredentials = {
           apiKey: decryptedApiKey,
           apiSecret: decryptedApiSecret,
         };
-  
+
         // Ejecutar el bot con la configuración completa, incluyendo símbolos
         const result = await binanceService.executeTrades(
           credentials,
           userId,
           config.tradeAmountUSD,
-          config.intervals,        // Ya es un array, no necesita conversión
-          config.simbolos,         // <-- Se pasa la lista de símbolos seleccionados
+          config.intervals, // Ya es un array, no necesita conversión
+          config.simbolos, // <-- Se pasa la lista de símbolos seleccionados
           config.limit,
           config.cooldownMinutes
         );
-  
-        console.log(`✅ Bot ejecutado para usuario ${userId}. Operaciones: ${result.executed.length}`);
-  
+
+        console.log(
+          `✅ Bot ejecutado para usuario ${userId}. Operaciones: ${result.executed.length}`
+        );
+
         // Notificación vía WebSocket
         webSocketService.enviarNotificacion(userId, {
           id: randomUUID(),
           titulo: "Bot ejecutado",
           tipo: "bot_ejecutado",
-          mensaje: `Bot ejecutado. ${result.executed.filter(r => r.success).length} operaciones realizadas.`,
+          mensaje: `Bot ejecutado. ${
+            result.executed.filter((r) => r.success).length
+          } operaciones realizadas.`,
           fecha: new Date().toISOString(),
           leida: false,
         });
-  
       } catch (error) {
         console.error(`❌ Error ejecutando bot para usuario ${userId}:`, error);
       }
