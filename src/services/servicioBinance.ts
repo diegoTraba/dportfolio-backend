@@ -2028,7 +2028,8 @@ class BinanceService {
     intervals: string[] = ["3m", "5m"],
     simbolos: string[] = SUPPORTED_SYMBOLS,
     limit: number = 50,
-    cooldownMinutes: number = 3
+    cooldownMinutes: number = 3,
+    maxInversion: number = 10
   ): Promise<{
     executed: {
       symbol: string;
@@ -2054,7 +2055,6 @@ class BinanceService {
       confidence: number;
     }[] = [];
     const cooldownMs = cooldownMinutes * 60 * 1000;
-
     try {
       // Obtener señales combinadas para todos los símbolos
       const allSignals = await this.getAllTechnicalSignalsMulti(
@@ -2108,11 +2108,59 @@ class BinanceService {
             );
             montoCompra = minNotional;
           }
+
+          // --- VERIFICACIÓN DE LÍMITE DE INVERSIÓN ---
+          if (maxInversion) {
+            const supabase = getSupabaseClient();
+            const { data: comprasActivas, error: errorTotal } = await supabase
+              .from("compras")
+              .select("total")
+              .eq("idUsuario", userId)
+              .eq("botS", true)
+              .eq("vendida", false);
+
+            if (errorTotal) {
+              console.error(
+                "⚠️ Error al calcular total invertido:",
+                errorTotal
+              );
+              results.push({
+                symbol,
+                side: "BUY",
+                success: false,
+                error: "Error al verificar límite de inversión",
+                confidence: combinedSignal.confidence,
+              });
+              continue;
+            }
+
+            const totalInvertido = comprasActivas.reduce(
+              (sum, c) => sum + (c.total || 0),
+              0
+            );
+
+            if (totalInvertido + montoCompra > maxInversion) {
+              console.log(
+                `⏭️ Límite de inversión alcanzado. Total: ${totalInvertido}, Máx: ${maxInversion}, Intento: ${montoCompra}`
+              );
+              results.push({
+                symbol,
+                side: "BUY",
+                success: false,
+                skipped: true,
+                reason: "Límite de inversión alcanzado",
+                confidence: combinedSignal.confidence,
+              });
+              continue;
+            }
+          }
+          // --- FIN VERIFICACIÓN ---
+
           const quantityBase = montoCompra / currentPrice;
           const rangoInferior = currentPrice * 0.996;
           const rangoSuperior = currentPrice * 1.004;
 
-          // --- NUEVA VERIFICACIÓN: compra existente en rango ±0.4% ---
+          // --- VERIFICACIÓN: compra existente en rango ±0.4% ---
           const supabase = getSupabaseClient();
           const { data: compraExistente, error: errorExistente } =
             await supabase

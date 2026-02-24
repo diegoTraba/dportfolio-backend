@@ -19,6 +19,7 @@ interface BotConfig {
   limit: number;
   cooldownMinutes: number;
   fechaActivacion?: string;
+  maxInversion: number;
 }
 
 export interface CompraUsuario {
@@ -248,7 +249,6 @@ export class ServicioMonitoreo {
 
       // Verificar cada alerta
       for (const alerta of alertas) {
-
         const simbolo = `${alerta.criptomoneda}USDC`;
         const precioActual = precios[simbolo]?.precio;
 
@@ -269,7 +269,7 @@ export class ServicioMonitoreo {
           precioActual <= alerta.precio_objetivo
         ) {
           condicionCumplida = true;
-        } 
+        }
 
         if (condicionCumplida) {
           console.log(`   🚀 Activando alerta ${alerta.id}...`);
@@ -699,6 +699,7 @@ export class ServicioMonitoreo {
       limit: config.limit ?? 50,
       cooldownMinutes: config.cooldownMinutes ?? 5,
       fechaActivacion: new Date().toISOString(),
+      maxInversion: config.maxInversion
     };
 
     this.usuariosBotActivos.set(userId, configCompleta);
@@ -778,24 +779,28 @@ export class ServicioMonitoreo {
           config.intervals, // Ya es un array, no necesita conversión
           config.simbolos, // <-- Se pasa la lista de símbolos seleccionados
           config.limit,
-          config.cooldownMinutes
+          config.cooldownMinutes,
+          config.maxInversion
         );
 
         console.log(
           `✅ Bot ejecutado para usuario ${userId}. Operaciones: ${result.executed.length}`
         );
 
-        // Notificación vía WebSocket
-        webSocketService.enviarNotificacion(userId, {
-          id: "temp_"+randomUUID(),
-          titulo: "Bot ejecutado",
-          tipo: "bot_ejecutado",
-          mensaje: `Bot ejecutado. ${
-            result.executed.filter((r) => r.success).length
-          } operaciones realizadas.`,
-          fecha: new Date().toISOString(),
-          leida: false,
-        });
+        //Solo notificamos al usuario si se ha realizado alguna operacion
+        if (result.executed.length > 0) {
+          // Notificación vía WebSocket
+          webSocketService.enviarNotificacion(userId, {
+            id: "temp_" + randomUUID(),
+            titulo: "Bot ejecutado",
+            tipo: "bot_ejecutado",
+            mensaje: `Bot ejecutado. ${
+              result.executed.filter((r) => r.success).length
+            } operaciones realizadas.`,
+            fecha: new Date().toISOString(),
+            leida: false,
+          });
+        }
       } catch (error) {
         console.error(`❌ Error ejecutando bot para usuario ${userId}:`, error);
       }

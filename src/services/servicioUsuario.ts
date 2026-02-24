@@ -271,4 +271,53 @@ export const servicioUsuario = {
       throw error;
     }
   },
+
+  desactivarBotEnCompras: async (userId: string): Promise<{ success: boolean; count: number; error?: string }> => {
+    try {
+      const supabase = getSupabaseClient();
+  
+      const { data, error } = await supabase
+        .from('compras')
+        .update({ botS: false })
+        .eq('idUsuario', userId)
+        .eq('botS', true)
+        .select(); // opcional: para obtener las filas actualizadas
+  
+      if (error) {
+        console.error('Error al desactivar botS en compras:', error);
+        return { success: false, count: 0, error: error.message };
+      }
+  
+      const count = data?.length || 0;
+      console.log(`✅ Desactivado botS en ${count} compras para usuario ${userId}`);
+      return { success: true, count };
+    } catch (error) {
+      console.error('Error inesperado en desactivarBotEnCompras:', error);
+      return { success: false, count: 0, error: String(error) };
+    }
+  },
+
+  obtenerTotalInvertidoBot: async (userId: string): Promise<number> => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('compras')
+        .select('total') // o 'precio, cantidad' y luego multiplicar
+        .eq('idUsuario', userId)
+        .eq('botS', true)
+        .eq('vendida', false);
+  
+      if (error) {
+        console.error('Error al obtener total invertido:', error);
+        return 0;
+      }
+  
+      // Sumar los totales (asumiendo que 'total' es el monto en USDC)
+      const total = data.reduce((acc, compra) => acc + (compra.total || 0), 0);
+      return total;
+    } catch (error) {
+      console.error('Error inesperado en obtenerTotalInvertidoBot:', error);
+      return 0;
+    }
+  }
 };

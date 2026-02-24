@@ -135,7 +135,7 @@ router.get('/signals-multi', async (req, res) => {
 // Activar bot para un usuario (con parámetros opcionales)
 router.post('/bot/activar', async (req, res) => {
   try {
-    const { userId, tradeAmountUSD, intervals, simbolos, limit, cooldownMinutes } = req.body;
+    const { userId, tradeAmountUSD, intervals, simbolos, limit, cooldownMinutes, maxInversion } = req.body;
     if (!userId) {
       return res.status(400).json({ error: 'userId es requerido' });
     }
@@ -149,6 +149,7 @@ router.post('/bot/activar', async (req, res) => {
       simbolos: simbolosArray,
       limit: limit ? Number(limit) : undefined,
       cooldownMinutes: cooldownMinutes ? Number(cooldownMinutes) : undefined,
+      maxInversion: maxInversion
     });
 
     res.json({
@@ -170,9 +171,11 @@ router.post('/bot/desactivar', async (req, res) => {
     }
 
     const desactivado = monitorService.desactivarBot(userId);
+    const resultadoBD = await servicioUsuario.desactivarBotEnCompras(userId);
     res.json({
       success: desactivado,
-      message: desactivado ? 'Bot desactivado correctamente' : 'El bot no estaba activo'
+      message: desactivado ? 'Bot desactivado correctamente' : 'El bot no estaba activo',
+      comprasActualizadas: resultadoBD.count
     });
   } catch (error: any) {
     console.error('Error en /bot/desactivar:', error);
