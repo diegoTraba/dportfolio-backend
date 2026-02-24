@@ -241,8 +241,16 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
     // Emparejadas en últimas 24h: compras vendidas cuya fechaCompra está en últimas 24h
     const emparejadasUltimas24h = compras.filter(c => c.vendida && new Date(c.fechaCompra) >= hace24h).length;
 
-    // Total de operaciones (ya lo tenías)
+    // Total de operaciones
     const totalOperaciones = compras.length + ventas.length;
+
+    // Beneficio total desde activación (suma de beneficio de todas las ventas)
+    const beneficioTotal = ventas.reduce((acc, v) => acc + (v.beneficio || 0), 0);
+
+    // Beneficio en últimas 24h (suma de beneficio de ventas con fechaVenta en las últimas 24h)
+    const beneficio24h = ventas
+      .filter(v => new Date(v.fechaVenta) >= hace24h)
+      .reduce((acc, v) => acc + (v.beneficio || 0), 0);
 
     res.json({
       userId,
@@ -253,7 +261,9 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
       operacionesPendientes,
       operacionesEmparejadas,
       operacionesUltimas24h,
-      emparejadasUltimas24h
+      emparejadasUltimas24h,
+      beneficioTotal,
+      beneficio24h
     });
   } catch (error: any) {
     console.error('Error en /bot/operaciones/:userId:', error);
