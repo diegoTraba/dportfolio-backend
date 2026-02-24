@@ -225,6 +225,23 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
       servicioUsuario.obtenerVentasUsuario(userId, true, config.fechaActivacion)
     ]);
 
+    // Fechas para últimas 24h
+    const ahora = new Date();
+    const hace24h = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
+
+    // Calcular pendientes y emparejadas sobre compras
+    const operacionesPendientes = compras.filter(c => !c.vendida).length;
+    const operacionesEmparejadas = compras.filter(c => c.vendida).length;
+
+    // Operaciones totales en últimas 24h (compras + ventas)
+    const comprasUltimas24h = compras.filter(c => new Date(c.fechaCompra) >= hace24h).length;
+    const ventasUltimas24h = ventas.filter(v => new Date(v.fechaVenta) >= hace24h).length;
+    const operacionesUltimas24h = comprasUltimas24h + ventasUltimas24h;
+
+    // Emparejadas en últimas 24h: compras vendidas cuya fechaCompra está en últimas 24h
+    const emparejadasUltimas24h = compras.filter(c => c.vendida && new Date(c.fechaCompra) >= hace24h).length;
+
+    // Total de operaciones (ya lo tenías)
     const totalOperaciones = compras.length + ventas.length;
 
     res.json({
@@ -232,7 +249,11 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
       fechaActivacion: config.fechaActivacion,
       compras: compras.length,
       ventas: ventas.length,
-      totalOperaciones
+      totalOperaciones,
+      operacionesPendientes,
+      operacionesEmparejadas,
+      operacionesUltimas24h,
+      emparejadasUltimas24h
     });
   } catch (error: any) {
     console.error('Error en /bot/operaciones/:userId:', error);

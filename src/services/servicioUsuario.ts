@@ -247,8 +247,7 @@ export const servicioUsuario = {
       let query = supabase
         .from("compras")
         .select("*")
-        .eq("idUsuario", userId)
-        .eq("vendida", false);
+        .eq("idUsuario", userId);
   
       if (bots) {
         query = query.eq("bots", true);
