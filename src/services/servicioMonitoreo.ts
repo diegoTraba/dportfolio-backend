@@ -5,22 +5,13 @@ import { webSocketService } from "./servicioWebSocket.js";
 import { decrypt } from "../lib/encriptacion.js";
 import { servicioUsuario } from "./servicioUsuario.js";
 import { BinanceCredentials } from "../interfaces/binance.types.js";
+import {SimboloConfig, BotConfig} from "../interfaces/bot.types.js"
 import { randomUUID } from "crypto";
 
 export interface DatosPrecio {
   simbolo: string;
   precio: number;
   fechaActualizacion: string;
-}
-
-interface BotConfig {
-  tradeAmountUSD: number;
-  intervals: string[];
-  simbolos: string[]; // <-- Nuevo campo
-  limit: number;
-  cooldownMinutes: number;
-  fechaActivacion?: string;
-  maxInversion: number;
 }
 
 export interface CompraUsuario {
@@ -691,23 +682,33 @@ export class ServicioMonitoreo {
       console.log(`⚠️ El bot ya está activo para el usuario ${userId}`);
       return false;
     }
-
-    // Valores por defecto incluyendo simbolos (vacío por defecto)
+  
+    // Procesar los símbolos: pueden ser string[] (antiguo) o SimboloConfig[] (nuevo)
+    let simbolosConfig: SimboloConfig[] = [];
+    if (config.simbolos) {
+      if (Array.isArray(config.simbolos)) {
+        // Si el primer elemento es string, convertir cada uno a objeto sin límites
+        if (config.simbolos.length > 0 && typeof config.simbolos[0] === 'string') {
+          simbolosConfig = (config.simbolos as unknown as string[]).map(s => ({ symbol: s }));
+        } else {
+          // Ya es el nuevo formato
+          simbolosConfig = config.simbolos as SimboloConfig[];
+        }
+      }
+    }
+  
     const configCompleta: BotConfig = {
       tradeAmountUSD: config.tradeAmountUSD ?? 10,
       intervals: config.intervals ?? ["3m", "5m"],
-      simbolos: config.simbolos ?? [], // <-- Se guarda la lista de símbolos
+      simbolos: simbolosConfig,
       limit: config.limit ?? 50,
       cooldownMinutes: config.cooldownMinutes ?? 5,
       fechaActivacion: new Date().toISOString(),
-      maxInversion: config.maxInversion
+      maxInversion: config.maxInversion ?? 100, // Valor por defecto si no se envía
     };
-
+  
     this.usuariosBotActivos.set(userId, configCompleta);
-    console.log(
-      `✅ Bot activado para el usuario ${userId} con configuración:`,
-      configCompleta
-    );
+    console.log(`✅ Bot activado para el usuario ${userId} con configuración:`, configCompleta);
     return true;
   }
 

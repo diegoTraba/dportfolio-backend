@@ -140,16 +140,36 @@ router.post('/bot/activar', async (req, res) => {
       return res.status(400).json({ error: 'userId es requerido' });
     }
 
-    const intervalArray = intervals ? (intervals as string).split(',').map(s => s.trim()) : undefined;
-    const simbolosArray = simbolos ? (simbolos as string).split(',').map(s => s.trim()) : undefined;
+    // Procesar intervals (puede ser string separado por comas o array)
+    let intervalArray: string[] | undefined;
+    if (typeof intervals === 'string') {
+      intervalArray = intervals.split(',').map(s => s.trim());
+    } else if (Array.isArray(intervals)) {
+      intervalArray = intervals;
+    }
+
+    // Procesar simbolos: se espera un array de objetos con symbol, lowerLimit y upperLimit
+    let simbolosArray: any[] = [];
+    if (Array.isArray(simbolos)) {
+      // Si es un array de strings (formato antiguo), convertir a objetos sin límites
+      if (simbolos.length > 0 && typeof simbolos[0] === 'string') {
+        simbolosArray = (simbolos as string[]).map(s => ({ symbol: s }));
+      } else {
+        // Nuevo formato: array de objetos
+        simbolosArray = simbolos;
+      }
+    } else if (typeof simbolos === 'string') {
+      // Por si acaso llega como string separado por comas (compatibilidad)
+      simbolosArray = simbolos.split(',').map(s => ({ symbol: s.trim() }));
+    }
 
     const activado = monitorService.activarBot(userId, {
       tradeAmountUSD: tradeAmountUSD ? Number(tradeAmountUSD) : undefined,
       intervals: intervalArray,
-      simbolos: simbolosArray,
+      simbolos: simbolosArray,   // Ahora pasa la estructura completa con límites
       limit: limit ? Number(limit) : undefined,
       cooldownMinutes: cooldownMinutes ? Number(cooldownMinutes) : undefined,
-      maxInversion: maxInversion
+      maxInversion: maxInversion ? Number(maxInversion) : undefined,
     });
 
     res.json({
@@ -240,7 +260,7 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
     
 
     // Operaciones totales en últimas 24h (compras + ventas)
-    const comprasUltimas24h = compras.filter(c => new Date(c.fechaCompra) >= hace24h).length;
+    const comprasUltimas24h = compras.filter(c => !c.vendida && new Date(c.fechaCompra) >= hace24h).length;
     const ventasUltimas24h = ventas.filter(v => new Date(v.fechaVenta) >= hace24h).length;
     const operacionesUltimas24h = comprasUltimas24h + ventasUltimas24h;  
 

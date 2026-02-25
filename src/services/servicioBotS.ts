@@ -1,6 +1,7 @@
 import { EMA, RSI, MACD } from "technicalindicators";
 import { getSupabaseClient } from "../lib/supabase.js";
 import { BinanceCredentials } from "../interfaces/binance.types";
+import { SimboloConfig, BotConfig } from "../interfaces/bot.types.js";
 import { binanceService } from "./servicioBinance.js";
 
 // Lista fija de símbolos a consultar
@@ -43,9 +44,10 @@ type TradeExecutionResult = {
 };
 
 // Type guard para señales de trading (excluye "NONE")
-function isTradeSignal(
-  signal: { action: "BUY" | "SELL" | "NONE"; confidence: number }
-): signal is { action: "BUY" | "SELL"; confidence: number } {
+function isTradeSignal(signal: {
+  action: "BUY" | "SELL" | "NONE";
+  confidence: number;
+}): signal is { action: "BUY" | "SELL"; confidence: number } {
   return signal.action !== "NONE";
 }
 
@@ -72,7 +74,9 @@ class ServicioBot {
     userId: string,
     tradeAmountUSD: number = 10,
     intervals: string[] = ["3m", "5m"],
-    simbolos: string[] = SUPPORTED_SYMBOLS,
+    simbolosConfig: SimboloConfig[] = SUPPORTED_SYMBOLS.map((s) => ({
+      symbol: s,
+    })),
     limit: number = 50,
     cooldownMinutes: number = 3,
     maxInversion: number = 10
@@ -81,29 +85,45 @@ class ServicioBot {
     const cooldownMs = cooldownMinutes * 60 * 1000;
 
     try {
+      // Crear un mapa para acceso rápido a la configuración por símbolo
+      const configMap = new Map(
+        simbolosConfig.map((item) => [item.symbol, item])
+      );
+      // Extraer solo los símbolos para la consulta de señales
+      const symbolsList = simbolosConfig.map((item) => item.symbol);
       // Obtener señales combinadas para todos los símbolos
       const allSignals = await binanceService.getAllTechnicalSignalsMulti(
         intervals,
         limit,
-        simbolos
+        symbolsList
       );
 
       // Procesar cada señal
       for (const signal of allSignals) {
         const { symbol, combinedSignal } = signal;
 
+        // Obtener configuración específica del símbolo
+        const config = configMap.get(symbol);
+        if (!config) continue; // Seguridad, no debería ocurrir
+
         // 1. Type guard para asegurar que sea BUY/SELL y además confianza suficiente
         if (!isTradeSignal(combinedSignal) || combinedSignal.confidence < 0.5) {
           continue; // Ignorar señales no comerciales o de baja confianza
         }
 
-        // A partir de aquí, combinedSignal es de tipo { action: "BUY" | "SELL"; confidence: number }
-
         // 2. Verificar cooldown
         if (this.isCooldownActive(symbol, cooldownMs)) {
           const minsLeft = this.getCooldownMinutesLeft(symbol, cooldownMs);
-          console.log(`⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`);
-          results.push(this.buildSkippedResult(symbol, combinedSignal, `Cooldown activo (espera ${minsLeft} min)`));
+          console.log(
+            `⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`
+          );
+          results.push(
+            this.buildSkippedResult(
+              symbol,
+              combinedSignal,
+              `Cooldown activo (espera ${minsLeft} min)`
+            )
+          );
           continue;
         }
 
@@ -116,7 +136,9 @@ class ServicioBot {
             symbol,
             combinedSignal,
             tradeAmountUSD,
-            maxInversion
+            maxInversion,
+            config.lowerLimit, // ← Límite inferior
+            config.upperLimit // ← Límite superior
           );
           results.push(buyResult);
         } else {
@@ -160,6 +182,27 @@ class ServicioBot {
     return minsLeft.toFixed(1);
   }
 
+  private checkPriceWithinLimits(
+    symbol: string,
+    currentPrice: number,
+    lowerLimit?: number | null,
+    upperLimit?: number | null
+  ): { within: boolean; message?: string } {
+    if (lowerLimit != null && currentPrice < lowerLimit) {
+      return {
+        within: false,
+        message: `Precio ${currentPrice} por debajo del límite inferior ${lowerLimit}`,
+      };
+    }
+    if (upperLimit != null && currentPrice > upperLimit) {
+      return {
+        within: false,
+        message: `Precio ${currentPrice} por encima del límite superior ${upperLimit}`,
+      };
+    }
+    return { within: true };
+  }
+
   /**
    * Construye un resultado para una operación omitida (skipped).
    */
@@ -187,7 +230,9 @@ class ServicioBot {
     symbol: string,
     signal: { action: "BUY" | "SELL"; confidence: number },
     tradeAmountUSD: number,
-    maxInversion: number
+    maxInversion: number,
+    lowerLimit?: number | null,
+    upperLimit?: number | null
   ): Promise<TradeExecutionResult> {
     console.log(
       `🔔 Señal de COMPRA para ${symbol} con confianza ${signal.confidence}. Verificando disponibilidad...`
@@ -196,6 +241,19 @@ class ServicioBot {
     try {
       // Obtener precio actual e información del símbolo (filtros, minNotional, etc.)
       const currentPrice = await binanceService.getPrice(symbol);
+
+      // Validar límites
+      const priceCheck = this.checkPriceWithinLimits(
+        symbol,
+        currentPrice,
+        lowerLimit,
+        upperLimit
+      );
+      if (!priceCheck.within) {
+        console.log(`⏭️ ${symbol}: ${priceCheck.message}`);
+        return this.buildSkippedResult(symbol, signal, priceCheck.message!);
+      }
+
       const symbolInfo = await binanceService.getSymbolInfo(
         credentials,
         symbol
