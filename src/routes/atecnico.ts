@@ -234,7 +234,7 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
 
     // Calcular pendientes y emparejadas sobre compras
     const operacionesPendientes = compras.filter(c => !c.vendida).length;
-    const operacionesEmparejadas = compras.filter(c => c.vendida).length;
+    const operacionesEmparejadas = ventas.length;
 
     console.log("operaciones emparejadas botS: "+operacionesEmparejadas);
     
@@ -245,7 +245,7 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
     const operacionesUltimas24h = comprasUltimas24h + ventasUltimas24h;  
 
     // Emparejadas en últimas 24h: compras vendidas cuya fechaCompra está en últimas 24h
-    const emparejadasUltimas24h = compras.filter(c => c.vendida && new Date(c.fechaCompra) >= hace24h).length;
+    const emparejadasUltimas24h = ventas.filter(v => new Date(v.fechaVenta) >= hace24h).length;
     console.log("operaciones emparejadas ultimas 24h botS: "+emparejadasUltimas24h);
 
     // Total de operaciones
