@@ -1,4 +1,5 @@
 import { binanceService } from "./servicioBinance.js";
+import { servicioBot } from "./servicioBotS.js"
 import { getSupabaseClient } from "../lib/supabase.js";
 import { webSocketService } from "./servicioWebSocket.js";
 import { decrypt } from "../lib/encriptacion.js";
@@ -772,7 +773,7 @@ export class ServicioMonitoreo {
         };
 
         // Ejecutar el bot con la configuración completa, incluyendo símbolos
-        const result = await binanceService.executeTrades(
+        const result = await servicioBot.executeTrades(
           credentials,
           userId,
           config.tradeAmountUSD,

@@ -2021,637 +2021,637 @@ class BinanceService {
    * @param limit Número de velas por intervalo
    * @param cooldownMinutes Minutos de espera entre operaciones del mismo símbolo (por defecto 5)
    */
-  async executeTrades(
-    credentials: BinanceCredentials,
-    userId: string,
-    tradeAmountUSD: number = 10,
-    intervals: string[] = ["3m", "5m"],
-    simbolos: string[] = SUPPORTED_SYMBOLS,
-    limit: number = 50,
-    cooldownMinutes: number = 3,
-    maxInversion: number = 10
-  ): Promise<{
-    executed: {
-      symbol: string;
-      side: "BUY" | "SELL";
-      success: boolean;
-      order?: any;
-      error?: string;
-      skipped?: boolean;
-      reason?: string;
-      dbSaved?: boolean;
-      confidence: number;
-    }[];
-  }> {
-    const results: {
-      symbol: string;
-      side: "BUY" | "SELL";
-      success: boolean;
-      order?: any;
-      error?: string;
-      skipped?: boolean;
-      reason?: string;
-      dbSaved?: boolean;
-      confidence: number;
-    }[] = [];
-    const cooldownMs = cooldownMinutes * 60 * 1000;
-    try {
-      // Obtener señales combinadas para todos los símbolos
-      const allSignals = await this.getAllTechnicalSignalsMulti(
-        intervals,
-        limit,
-        simbolos
-      );
+  // async executeTrades(
+  //   credentials: BinanceCredentials,
+  //   userId: string,
+  //   tradeAmountUSD: number = 10,
+  //   intervals: string[] = ["3m", "5m"],
+  //   simbolos: string[] = SUPPORTED_SYMBOLS,
+  //   limit: number = 50,
+  //   cooldownMinutes: number = 3,
+  //   maxInversion: number = 10
+  // ): Promise<{
+  //   executed: {
+  //     symbol: string;
+  //     side: "BUY" | "SELL";
+  //     success: boolean;
+  //     order?: any;
+  //     error?: string;
+  //     skipped?: boolean;
+  //     reason?: string;
+  //     dbSaved?: boolean;
+  //     confidence: number;
+  //   }[];
+  // }> {
+  //   const results: {
+  //     symbol: string;
+  //     side: "BUY" | "SELL";
+  //     success: boolean;
+  //     order?: any;
+  //     error?: string;
+  //     skipped?: boolean;
+  //     reason?: string;
+  //     dbSaved?: boolean;
+  //     confidence: number;
+  //   }[] = [];
+  //   const cooldownMs = cooldownMinutes * 60 * 1000;
+  //   try {
+  //     // Obtener señales combinadas para todos los símbolos
+  //     const allSignals = await this.getAllTechnicalSignalsMulti(
+  //       intervals,
+  //       limit,
+  //       simbolos
+  //     );
 
-      for (const signal of allSignals) {
-        const { symbol, combinedSignal } = signal;
+  //     for (const signal of allSignals) {
+  //       const { symbol, combinedSignal } = signal;
 
-        // Verificar cooldown
-        const lastTrade = this.lastTradeTime.get(symbol);
-        if (lastTrade && Date.now() - lastTrade < cooldownMs) {
-          const minsLeft = (
-            (cooldownMs - (Date.now() - lastTrade)) /
-            60000
-          ).toFixed(1);
-          console.log(
-            `⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`
-          );
-          results.push({
-            symbol,
-            side: combinedSignal.action === "BUY" ? "BUY" : "SELL",
-            success: false,
-            skipped: true,
-            reason: `Cooldown activo (espera ${minsLeft} min)`,
-            confidence: combinedSignal.confidence,
-          });
-          continue;
-        }
+  //       // Verificar cooldown
+  //       const lastTrade = this.lastTradeTime.get(symbol);
+  //       if (lastTrade && Date.now() - lastTrade < cooldownMs) {
+  //         const minsLeft = (
+  //           (cooldownMs - (Date.now() - lastTrade)) /
+  //           60000
+  //         ).toFixed(1);
+  //         console.log(
+  //           `⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`
+  //         );
+  //         results.push({
+  //           symbol,
+  //           side: combinedSignal.action === "BUY" ? "BUY" : "SELL",
+  //           success: false,
+  //           skipped: true,
+  //           reason: `Cooldown activo (espera ${minsLeft} min)`,
+  //           confidence: combinedSignal.confidence,
+  //         });
+  //         continue;
+  //       }
 
-        // Ignorar si confianza < 0.5
-        if (combinedSignal.confidence < 0.5) continue;
+  //       // Ignorar si confianza < 0.5
+  //       if (combinedSignal.confidence < 0.5) continue;
 
-        // ========== COMPRA ==========
-        if (combinedSignal.action === "BUY") {
-          console.log(
-            `🔔 Señal de COMPRA para ${symbol} con confianza ${combinedSignal.confidence}. Verificando disponibilidad...`
-          );
+  //       // ========== COMPRA ==========
+  //       if (combinedSignal.action === "BUY") {
+  //         console.log(
+  //           `🔔 Señal de COMPRA para ${symbol} con confianza ${combinedSignal.confidence}. Verificando disponibilidad...`
+  //         );
 
-          const currentPrice = await this.getPrice(symbol);
-          const symbolInfo = await this.getSymbolInfo(credentials, symbol);
-          const minNotional = symbolInfo.minNotional || 5; // valor por defecto si no viene
+  //         const currentPrice = await this.getPrice(symbol);
+  //         const symbolInfo = await this.getSymbolInfo(credentials, symbol);
+  //         const minNotional = symbolInfo.minNotional || 5; // valor por defecto si no viene
 
-          // 2. Ajustar el monto de compra si es menor que minNotional
-          let montoCompra = tradeAmountUSD;
-          if (montoCompra < minNotional) {
-            console.log(
-              `⚠️ tradeAmountUSD (${montoCompra}) es menor que minNotional (${minNotional}) para ${symbol}. Usando ${minNotional}`
-            );
-            montoCompra = minNotional;
-          }
+  //         // 2. Ajustar el monto de compra si es menor que minNotional
+  //         let montoCompra = tradeAmountUSD;
+  //         if (montoCompra < minNotional) {
+  //           console.log(
+  //             `⚠️ tradeAmountUSD (${montoCompra}) es menor que minNotional (${minNotional}) para ${symbol}. Usando ${minNotional}`
+  //           );
+  //           montoCompra = minNotional;
+  //         }
 
-          // --- VERIFICACIÓN DE LÍMITE DE INVERSIÓN ---
-          if (maxInversion) {
-            const supabase = getSupabaseClient();
-            const { data: comprasActivas, error: errorTotal } = await supabase
-              .from("compras")
-              .select("total")
-              .eq("idUsuario", userId)
-              .eq("botS", true)
-              .eq("vendida", false);
+  //         // --- VERIFICACIÓN DE LÍMITE DE INVERSIÓN ---
+  //         if (maxInversion) {
+  //           const supabase = getSupabaseClient();
+  //           const { data: comprasActivas, error: errorTotal } = await supabase
+  //             .from("compras")
+  //             .select("total")
+  //             .eq("idUsuario", userId)
+  //             .eq("botS", true)
+  //             .eq("vendida", false);
 
-            if (errorTotal) {
-              console.error(
-                "⚠️ Error al calcular total invertido:",
-                errorTotal
-              );
-              results.push({
-                symbol,
-                side: "BUY",
-                success: false,
-                error: "Error al verificar límite de inversión",
-                confidence: combinedSignal.confidence,
-              });
-              continue;
-            }
+  //           if (errorTotal) {
+  //             console.error(
+  //               "⚠️ Error al calcular total invertido:",
+  //               errorTotal
+  //             );
+  //             results.push({
+  //               symbol,
+  //               side: "BUY",
+  //               success: false,
+  //               error: "Error al verificar límite de inversión",
+  //               confidence: combinedSignal.confidence,
+  //             });
+  //             continue;
+  //           }
 
-            const totalInvertido = comprasActivas.reduce(
-              (sum, c) => sum + (c.total || 0),
-              0
-            );
+  //           const totalInvertido = comprasActivas.reduce(
+  //             (sum, c) => sum + (c.total || 0),
+  //             0
+  //           );
 
-            if (totalInvertido + montoCompra > maxInversion) {
-              console.log(
-                `⏭️ Límite de inversión alcanzado. Total: ${totalInvertido}, Máx: ${maxInversion}, Intento: ${montoCompra}`
-              );
-              results.push({
-                symbol,
-                side: "BUY",
-                success: false,
-                skipped: true,
-                reason: "Límite de inversión alcanzado",
-                confidence: combinedSignal.confidence,
-              });
-              continue;
-            }
-          }
-          // --- FIN VERIFICACIÓN ---
+  //           if (totalInvertido + montoCompra > maxInversion) {
+  //             console.log(
+  //               `⏭️ Límite de inversión alcanzado. Total: ${totalInvertido}, Máx: ${maxInversion}, Intento: ${montoCompra}`
+  //             );
+  //             results.push({
+  //               symbol,
+  //               side: "BUY",
+  //               success: false,
+  //               skipped: true,
+  //               reason: "Límite de inversión alcanzado",
+  //               confidence: combinedSignal.confidence,
+  //             });
+  //             continue;
+  //           }
+  //         }
+  //         // --- FIN VERIFICACIÓN ---
 
-          const quantityBase = montoCompra / currentPrice;
-          const rangoInferior = currentPrice * 0.996;
-          const rangoSuperior = currentPrice * 1.004;
+  //         const quantityBase = montoCompra / currentPrice;
+  //         const rangoInferior = currentPrice * 0.996;
+  //         const rangoSuperior = currentPrice * 1.004;
 
-          // --- VERIFICACIÓN: compra existente en rango ±0.4% ---
-          const supabase = getSupabaseClient();
-          const { data: compraExistente, error: errorExistente } =
-            await supabase
-              .from("compras")
-              .select("id, precio")
-              .eq("simbolo", symbol)
-              .eq("idUsuario", userId)
-              .eq("botS", true)
-              .eq("vendida", false)
-              .gte("precio", rangoInferior)
-              .lte("precio", rangoSuperior)
-              .limit(1);
+  //         // --- VERIFICACIÓN: compra existente en rango ±0.4% ---
+  //         const supabase = getSupabaseClient();
+  //         const { data: compraExistente, error: errorExistente } =
+  //           await supabase
+  //             .from("compras")
+  //             .select("id, precio")
+  //             .eq("simbolo", symbol)
+  //             .eq("idUsuario", userId)
+  //             .eq("botS", true)
+  //             .eq("vendida", false)
+  //             .gte("precio", rangoInferior)
+  //             .lte("precio", rangoSuperior)
+  //             .limit(1);
 
-          if (errorExistente) {
-            console.error(
-              "⚠️ Error verificando compras existentes:",
-              errorExistente
-            );
-            results.push({
-              symbol,
-              side: "BUY",
-              success: false,
-              error: "Error al verificar compras previas",
-              confidence: combinedSignal.confidence,
-            });
-            continue;
-          }
+  //         if (errorExistente) {
+  //           console.error(
+  //             "⚠️ Error verificando compras existentes:",
+  //             errorExistente
+  //           );
+  //           results.push({
+  //             symbol,
+  //             side: "BUY",
+  //             success: false,
+  //             error: "Error al verificar compras previas",
+  //             confidence: combinedSignal.confidence,
+  //           });
+  //           continue;
+  //         }
 
-          if (compraExistente && compraExistente.length > 0) {
-            console.log(
-              `⏭️ Ya existe una compra activa de ${symbol} en el rango de ±0.4% del precio actual (precio compra: ${compraExistente[0].precio}). Omitiendo.`
-            );
-            results.push({
-              symbol,
-              side: "BUY",
-              success: false,
-              skipped: true,
-              reason: "Compra existente en rango de precio cercano",
-              confidence: combinedSignal.confidence,
-            });
-            continue;
-          }
-          // -------------------------------------------------------------
+  //         if (compraExistente && compraExistente.length > 0) {
+  //           console.log(
+  //             `⏭️ Ya existe una compra activa de ${symbol} en el rango de ±0.4% del precio actual (precio compra: ${compraExistente[0].precio}). Omitiendo.`
+  //           );
+  //           results.push({
+  //             symbol,
+  //             side: "BUY",
+  //             success: false,
+  //             skipped: true,
+  //             reason: "Compra existente en rango de precio cercano",
+  //             confidence: combinedSignal.confidence,
+  //           });
+  //           continue;
+  //         }
+  //         // -------------------------------------------------------------
 
-          const availability = await this.checkBuyAvailability(
-            credentials,
-            symbol,
-            quantityBase,
-            currentPrice
-          );
-          if (!availability.canBuy) {
-            console.log(
-              `❌ No se puede comprar ${symbol}: saldo insuficiente de ${availability.quoteAsset}`
-            );
-            results.push({
-              symbol,
-              side: "BUY",
-              success: false,
-              error: `Saldo insuficiente de ${availability.quoteAsset}`,
-              confidence: combinedSignal.confidence,
-            });
-            continue;
-          }
+  //         const availability = await this.checkBuyAvailability(
+  //           credentials,
+  //           symbol,
+  //           quantityBase,
+  //           currentPrice
+  //         );
+  //         if (!availability.canBuy) {
+  //           console.log(
+  //             `❌ No se puede comprar ${symbol}: saldo insuficiente de ${availability.quoteAsset}`
+  //           );
+  //           results.push({
+  //             symbol,
+  //             side: "BUY",
+  //             success: false,
+  //             error: `Saldo insuficiente de ${availability.quoteAsset}`,
+  //             confidence: combinedSignal.confidence,
+  //           });
+  //           continue;
+  //         }
 
-          console.log(
-            `✅ Disponibilidad OK. Ejecutando orden de compra para ${symbol}...`
-          );
-          const buyResult = await this.placeBuyOrder(credentials, {
-            symbol,
-            quoteOrderQty: montoCompra,
-            type: "MARKET",
-          });
+  //         console.log(
+  //           `✅ Disponibilidad OK. Ejecutando orden de compra para ${symbol}...`
+  //         );
+  //         const buyResult = await this.placeBuyOrder(credentials, {
+  //           symbol,
+  //           quoteOrderQty: montoCompra,
+  //           type: "MARKET",
+  //         });
 
-          if (buyResult.success) {
-            console.log(`✅ Orden de compra ejecutada para ${symbol}`);
-            this.lastTradeTime.set(symbol, Date.now());
+  //         if (buyResult.success) {
+  //           console.log(`✅ Orden de compra ejecutada para ${symbol}`);
+  //           this.lastTradeTime.set(symbol, Date.now());
 
-            let dbSaved = false;
-            try {
-              const supabase = getSupabaseClient();
+  //           let dbSaved = false;
+  //           try {
+  //             const supabase = getSupabaseClient();
 
-              // Calcular comisión total en USDC
-              let comisionTotalUSDC = 0;
-              if (buyResult.order.fills && buyResult.order.fills.length > 0) {
-                buyResult.order.fills.forEach((fill: any) => {
-                  if (
-                    fill.commissionAsset === "USDC" ||
-                    fill.commissionAsset === "USDT"
-                  ) {
-                    comisionTotalUSDC += parseFloat(fill.commission);
-                  }
-                });
-              }
+  //             // Calcular comisión total en USDC
+  //             let comisionTotalUSDC = 0;
+  //             if (buyResult.order.fills && buyResult.order.fills.length > 0) {
+  //               buyResult.order.fills.forEach((fill: any) => {
+  //                 if (
+  //                   fill.commissionAsset === "USDC" ||
+  //                   fill.commissionAsset === "USDT"
+  //                 ) {
+  //                   comisionTotalUSDC += parseFloat(fill.commission);
+  //                 }
+  //               });
+  //             }
 
-              const datosCompra = {
-                exchange: "Binance",
-                idOrden: buyResult.order?.orderId?.toString() || "",
-                simbolo: symbol,
-                precio: buyResult.order?.fills?.[0]?.price
-                  ? parseFloat(buyResult.order.fills[0].price)
-                  : currentPrice,
-                cantidad: quantityBase, // cantidad base comprada
-                total: buyResult.order?.cummulativeQuoteQty
-                  ? parseFloat(buyResult.order.cummulativeQuoteQty)
-                  : null,
-                comision: comisionTotalUSDC,
-                comisionMoneda: "USDC",
-                fechaCompra: buyResult.order?.transactTime
-                  ? new Date(buyResult.order.transactTime).toISOString()
-                  : new Date().toISOString(),
-                vendida: false,
-                idUsuario: userId,
-                botS: true,
-              };
+  //             const datosCompra = {
+  //               exchange: "Binance",
+  //               idOrden: buyResult.order?.orderId?.toString() || "",
+  //               simbolo: symbol,
+  //               precio: buyResult.order?.fills?.[0]?.price
+  //                 ? parseFloat(buyResult.order.fills[0].price)
+  //                 : currentPrice,
+  //               cantidad: quantityBase, // cantidad base comprada
+  //               total: buyResult.order?.cummulativeQuoteQty
+  //                 ? parseFloat(buyResult.order.cummulativeQuoteQty)
+  //                 : null,
+  //               comision: comisionTotalUSDC,
+  //               comisionMoneda: "USDC",
+  //               fechaCompra: buyResult.order?.transactTime
+  //                 ? new Date(buyResult.order.transactTime).toISOString()
+  //                 : new Date().toISOString(),
+  //               vendida: false,
+  //               idUsuario: userId,
+  //               botS: true,
+  //             };
 
-              const { error: errorInsercion } = await supabase
-                .from("compras")
-                .insert([datosCompra]);
-              if (errorInsercion) {
-                console.error(
-                  "⚠️ Error guardando compra en BD:",
-                  errorInsercion
-                );
-              } else {
-                console.log("✅ Compra guardada en base de datos local");
-                dbSaved = true;
-              }
-            } catch (dbError) {
-              console.error("⚠️ Error en guardado BD:", dbError);
-            }
+  //             const { error: errorInsercion } = await supabase
+  //               .from("compras")
+  //               .insert([datosCompra]);
+  //             if (errorInsercion) {
+  //               console.error(
+  //                 "⚠️ Error guardando compra en BD:",
+  //                 errorInsercion
+  //               );
+  //             } else {
+  //               console.log("✅ Compra guardada en base de datos local");
+  //               dbSaved = true;
+  //             }
+  //           } catch (dbError) {
+  //             console.error("⚠️ Error en guardado BD:", dbError);
+  //           }
 
-            results.push({
-              symbol,
-              side: "BUY",
-              success: true,
-              order: buyResult.order,
-              dbSaved,
-              confidence: combinedSignal.confidence,
-            });
-          } else {
-            console.error(`❌ Error en compra de ${symbol}:`, buyResult.error);
-            results.push({
-              symbol,
-              side: "BUY",
-              success: false,
-              error: buyResult.error,
-              confidence: combinedSignal.confidence,
-            });
-          }
-        }
+  //           results.push({
+  //             symbol,
+  //             side: "BUY",
+  //             success: true,
+  //             order: buyResult.order,
+  //             dbSaved,
+  //             confidence: combinedSignal.confidence,
+  //           });
+  //         } else {
+  //           console.error(`❌ Error en compra de ${symbol}:`, buyResult.error);
+  //           results.push({
+  //             symbol,
+  //             side: "BUY",
+  //             success: false,
+  //             error: buyResult.error,
+  //             confidence: combinedSignal.confidence,
+  //           });
+  //         }
+  //       }
 
-        // ========== VENTA ==========
-        else if (combinedSignal.action === "SELL") {
-          console.log(
-            `🔔 Señal de VENTA para ${symbol} con confianza ${combinedSignal.confidence}. Verificando disponibilidad...`
-          );
+  //       // ========== VENTA ==========
+  //       else if (combinedSignal.action === "SELL") {
+  //         console.log(
+  //           `🔔 Señal de VENTA para ${symbol} con confianza ${combinedSignal.confidence}. Verificando disponibilidad...`
+  //         );
 
-          // Obtener precio actual y calcular umbral (0.5% por debajo)
-          const currentPrice = await this.getPrice(symbol);
-          const symbolInfo = await this.getSymbolInfo(credentials, symbol);
-          const umbral = currentPrice * 0.995; // precio de compra debe ser menor a este valor
+  //         // Obtener precio actual y calcular umbral (0.5% por debajo)
+  //         const currentPrice = await this.getPrice(symbol);
+  //         const symbolInfo = await this.getSymbolInfo(credentials, symbol);
+  //         const umbral = currentPrice * 0.995; // precio de compra debe ser menor a este valor
 
-          // 1. Obtener balance disponible del activo base
-          const availability = await this.checkSellAvailability(
-            credentials,
-            symbol,
-            1,
-            undefined
-          );
-          let balanceDisponible = availability.availableBalance;
-          if (balanceDisponible <= 0) {
-            console.log(
-              `⚠️ No hay balance de ${availability.baseAsset} para vender.`
-            );
-            results.push({
-              symbol,
-              side: "SELL",
-              success: false,
-              error: `Balance insuficiente de ${availability.baseAsset}`,
-              confidence: combinedSignal.confidence,
-            });
-            continue;
-          }
+  //         // 1. Obtener balance disponible del activo base
+  //         const availability = await this.checkSellAvailability(
+  //           credentials,
+  //           symbol,
+  //           1,
+  //           undefined
+  //         );
+  //         let balanceDisponible = availability.availableBalance;
+  //         if (balanceDisponible <= 0) {
+  //           console.log(
+  //             `⚠️ No hay balance de ${availability.baseAsset} para vender.`
+  //           );
+  //           results.push({
+  //             symbol,
+  //             side: "SELL",
+  //             success: false,
+  //             error: `Balance insuficiente de ${availability.baseAsset}`,
+  //             confidence: combinedSignal.confidence,
+  //           });
+  //           continue;
+  //         }
 
-          // 2. Buscar en BD todas las compras no vendidas de este símbolo con botS=true y precio < umbral
-          const supabase = getSupabaseClient();
-          const { data: compras, error: errorBusqueda } = await supabase
-            .from("compras")
-            .select("*")
-            .eq("simbolo", symbol)
-            .eq("idUsuario", userId)
-            .eq("vendida", false)
-            .eq("botS", true)
-            .lt("precio", umbral) // precio de compra menor que el umbral
-            .order("fechaCompra", { ascending: true });
+  //         // 2. Buscar en BD todas las compras no vendidas de este símbolo con botS=true y precio < umbral
+  //         const supabase = getSupabaseClient();
+  //         const { data: compras, error: errorBusqueda } = await supabase
+  //           .from("compras")
+  //           .select("*")
+  //           .eq("simbolo", symbol)
+  //           .eq("idUsuario", userId)
+  //           .eq("vendida", false)
+  //           .eq("botS", true)
+  //           .lt("precio", umbral) // precio de compra menor que el umbral
+  //           .order("fechaCompra", { ascending: true });
 
-          if (errorBusqueda || !compras || compras.length === 0) {
-            console.log(
-              `⚠️ No hay compras de ${symbol} con precio un 0.5% por debajo del actual (${currentPrice}). No se vende.`
-            );
-            results.push({
-              symbol,
-              side: "SELL",
-              success: false,
-              error: "No hay compras rentables para vender",
-              confidence: combinedSignal.confidence,
-            });
-            continue;
-          }
+  //         if (errorBusqueda || !compras || compras.length === 0) {
+  //           console.log(
+  //             `⚠️ No hay compras de ${symbol} con precio un 0.5% por debajo del actual (${currentPrice}). No se vende.`
+  //           );
+  //           results.push({
+  //             symbol,
+  //             side: "SELL",
+  //             success: false,
+  //             error: "No hay compras rentables para vender",
+  //             confidence: combinedSignal.confidence,
+  //           });
+  //           continue;
+  //         }
 
-          console.log(
-            `📦 Se encontraron ${compras.length} compra(s) que cumplen la condición.`
-          );
+  //         console.log(
+  //           `📦 Se encontraron ${compras.length} compra(s) que cumplen la condición.`
+  //         );
 
-          // 3. Verificar que el balance total sea suficiente para la suma de todas las cantidades
-          const cantidadTotalAVender = compras.reduce(
-            (sum, c) => sum + c.cantidad,
-            0
-          );
-          if (balanceDisponible < cantidadTotalAVender) {
-            console.log(
-              `❌ Balance insuficiente para vender todas las compras elegibles. Disponible: ${balanceDisponible}, necesario: ${cantidadTotalAVender}.`
-            );
-            results.push({
-              symbol,
-              side: "SELL",
-              success: false,
-              error:
-                "Balance insuficiente para vender todas las compras elegibles",
-              confidence: combinedSignal.confidence,
-            });
-            continue;
-          }
+  //         // 3. Verificar que el balance total sea suficiente para la suma de todas las cantidades
+  //         const cantidadTotalAVender = compras.reduce(
+  //           (sum, c) => sum + c.cantidad,
+  //           0
+  //         );
+  //         if (balanceDisponible < cantidadTotalAVender) {
+  //           console.log(
+  //             `❌ Balance insuficiente para vender todas las compras elegibles. Disponible: ${balanceDisponible}, necesario: ${cantidadTotalAVender}.`
+  //           );
+  //           results.push({
+  //             symbol,
+  //             side: "SELL",
+  //             success: false,
+  //             error:
+  //               "Balance insuficiente para vender todas las compras elegibles",
+  //             confidence: combinedSignal.confidence,
+  //           });
+  //           continue;
+  //         }
 
-          // 4. Ejecutar ventas individuales para cada compra
-          for (const compra of compras) {
-            const cantidadOriginal = compra.cantidad;
-            const stepSize = symbolInfo.stepSize || 1;
-            const minQty = symbolInfo.minQty || 0;
+  //         // 4. Ejecutar ventas individuales para cada compra
+  //         for (const compra of compras) {
+  //           const cantidadOriginal = compra.cantidad;
+  //           const stepSize = symbolInfo.stepSize || 1;
+  //           const minQty = symbolInfo.minQty || 0;
 
-            // Redondear hacia abajo al múltiplo de stepSize más cercano
-            let cantidadAVender =
-              Math.floor(cantidadOriginal / stepSize) * stepSize;
+  //           // Redondear hacia abajo al múltiplo de stepSize más cercano
+  //           let cantidadAVender =
+  //             Math.floor(cantidadOriginal / stepSize) * stepSize;
 
-            // --- NUEVO: Ajustar precisión decimal ---
-            const precision = stepSize.toString().split(".")[1]?.length || 0;
-            cantidadAVender = parseFloat(cantidadAVender.toFixed(precision));
+  //           // --- NUEVO: Ajustar precisión decimal ---
+  //           const precision = stepSize.toString().split(".")[1]?.length || 0;
+  //           cantidadAVender = parseFloat(cantidadAVender.toFixed(precision));
 
-            // Si la cantidad redondeada es menor que el mínimo permitido, omitir esta compra
-            if (cantidadAVender < minQty) {
-              console.log(
-                `⚠️ Cantidad redondeada ${cantidadAVender} < minQty (${minQty}) para ${symbol}. Omitiendo compra ${compra.id}.`
-              );
-              results.push({
-                symbol,
-                side: "SELL",
-                success: false,
-                skipped: true,
-                reason: `Cantidad redondeada insuficiente (${cantidadAVender} < ${minQty})`,
-                confidence: combinedSignal.confidence,
-              });
-              continue;
-            }
-            //valor mínimo de venta ---
-            let valorVenta = cantidadAVender * currentPrice;
-            const minNotional = symbolInfo.minNotional || 0;
-            if (valorVenta < minNotional) {
-              console.log(
-                `⚠️ Valor de venta ${valorVenta.toFixed(
-                  2
-                )} es menor que minNotional (${minNotional}) para ${symbol}. Omitiendo compra ${
-                  compra.id
-                }.`
-              );
-              results.push({
-                symbol,
-                side: "SELL",
-                success: false,
-                skipped: true,
-                reason: `Valor de venta (${valorVenta.toFixed(
-                  2
-                )}) menor que mínimo (${minNotional})`,
-                confidence: combinedSignal.confidence,
-              });
-              continue;
-            }
-            // Verificar que la cantidad sea válida según los filtros de Binance (step size, minNotional, etc.)
-            // const sellCheck = await this.checkSellAvailability(
-            //   credentials,
-            //   symbol,
-            //   cantidadAVender,
-            //   currentPrice
-            // );
-            // if (!sellCheck.canSell) {
-            //   console.log(
-            //     `❌ No se puede vender ${cantidadAVender} de ${symbol} (compra ${compra.id}):`,
-            //     sellCheck.reasons
-            //   );
-            //   results.push({
-            //     symbol,
-            //     side: "SELL",
-            //     success: false,
-            //     error: sellCheck.reasons?.join(", "),
-            //     confidence: combinedSignal.confidence,
-            //   });
-            //   continue; // pasar a la siguiente compra
-            // }
+  //           // Si la cantidad redondeada es menor que el mínimo permitido, omitir esta compra
+  //           if (cantidadAVender < minQty) {
+  //             console.log(
+  //               `⚠️ Cantidad redondeada ${cantidadAVender} < minQty (${minQty}) para ${symbol}. Omitiendo compra ${compra.id}.`
+  //             );
+  //             results.push({
+  //               symbol,
+  //               side: "SELL",
+  //               success: false,
+  //               skipped: true,
+  //               reason: `Cantidad redondeada insuficiente (${cantidadAVender} < ${minQty})`,
+  //               confidence: combinedSignal.confidence,
+  //             });
+  //             continue;
+  //           }
+  //           //valor mínimo de venta ---
+  //           let valorVenta = cantidadAVender * currentPrice;
+  //           const minNotional = symbolInfo.minNotional || 0;
+  //           if (valorVenta < minNotional) {
+  //             console.log(
+  //               `⚠️ Valor de venta ${valorVenta.toFixed(
+  //                 2
+  //               )} es menor que minNotional (${minNotional}) para ${symbol}. Omitiendo compra ${
+  //                 compra.id
+  //               }.`
+  //             );
+  //             results.push({
+  //               symbol,
+  //               side: "SELL",
+  //               success: false,
+  //               skipped: true,
+  //               reason: `Valor de venta (${valorVenta.toFixed(
+  //                 2
+  //               )}) menor que mínimo (${minNotional})`,
+  //               confidence: combinedSignal.confidence,
+  //             });
+  //             continue;
+  //           }
+  //           // Verificar que la cantidad sea válida según los filtros de Binance (step size, minNotional, etc.)
+  //           // const sellCheck = await this.checkSellAvailability(
+  //           //   credentials,
+  //           //   symbol,
+  //           //   cantidadAVender,
+  //           //   currentPrice
+  //           // );
+  //           // if (!sellCheck.canSell) {
+  //           //   console.log(
+  //           //     `❌ No se puede vender ${cantidadAVender} de ${symbol} (compra ${compra.id}):`,
+  //           //     sellCheck.reasons
+  //           //   );
+  //           //   results.push({
+  //           //     symbol,
+  //           //     side: "SELL",
+  //           //     success: false,
+  //           //     error: sellCheck.reasons?.join(", "),
+  //           //     confidence: combinedSignal.confidence,
+  //           //   });
+  //           //   continue; // pasar a la siguiente compra
+  //           // }
 
-            // --- NUEVO: Obtener precio actual justo antes de vender ---
-            const currentPriceBeforeSell = await this.getPrice(symbol);
+  //           // --- NUEVO: Obtener precio actual justo antes de vender ---
+  //           const currentPriceBeforeSell = await this.getPrice(symbol);
 
-            // Calcular precio mínimo aceptable (0.5% por encima del precio de compra)
-            const minAcceptablePrice = compra.precio * 1.005; // 0.5% más
+  //           // Calcular precio mínimo aceptable (0.5% por encima del precio de compra)
+  //           const minAcceptablePrice = compra.precio * 1.005; // 0.5% más
 
-            // Verificar que el precio actual sea al menos 0.5% superior al precio de compra
-            if (currentPriceBeforeSell < minAcceptablePrice) {
-              console.log(
-                `⚠️ Precio actual ${currentPriceBeforeSell} es inferior al mínimo aceptable (${minAcceptablePrice}) para compra ${compra.id} (precio compra: ${compra.precio}). Venta cancelada.`
-              );
-              results.push({
-                symbol,
-                side: "SELL",
-                success: false,
-                skipped: true,
-                reason: `Precio insuficiente (actual ${currentPriceBeforeSell} < ${minAcceptablePrice})`,
-                confidence: combinedSignal.confidence,
-              });
-              continue; // Pasar a la siguiente compra
-            }
+  //           // Verificar que el precio actual sea al menos 0.5% superior al precio de compra
+  //           if (currentPriceBeforeSell < minAcceptablePrice) {
+  //             console.log(
+  //               `⚠️ Precio actual ${currentPriceBeforeSell} es inferior al mínimo aceptable (${minAcceptablePrice}) para compra ${compra.id} (precio compra: ${compra.precio}). Venta cancelada.`
+  //             );
+  //             results.push({
+  //               symbol,
+  //               side: "SELL",
+  //               success: false,
+  //               skipped: true,
+  //               reason: `Precio insuficiente (actual ${currentPriceBeforeSell} < ${minAcceptablePrice})`,
+  //               confidence: combinedSignal.confidence,
+  //             });
+  //             continue; // Pasar a la siguiente compra
+  //           }
 
-            // Validar minNotional con el precio actualizado
-            valorVenta = cantidadAVender * currentPriceBeforeSell;
-            if (valorVenta < minNotional) {
-              console.log(
-                `⚠️ Valor de venta ${valorVenta.toFixed(
-                  2
-                )} es menor que minNotional (${minNotional}) para ${symbol}. Omitiendo compra ${
-                  compra.id
-                }.`
-              );
-              results.push({
-                symbol,
-                side: "SELL",
-                success: false,
-                skipped: true,
-                reason: `Valor de venta (${valorVenta.toFixed(
-                  2
-                )}) menor que mínimo (${minNotional})`,
-                confidence: combinedSignal.confidence,
-              });
-              continue;
-            }
+  //           // Validar minNotional con el precio actualizado
+  //           valorVenta = cantidadAVender * currentPriceBeforeSell;
+  //           if (valorVenta < minNotional) {
+  //             console.log(
+  //               `⚠️ Valor de venta ${valorVenta.toFixed(
+  //                 2
+  //               )} es menor que minNotional (${minNotional}) para ${symbol}. Omitiendo compra ${
+  //                 compra.id
+  //               }.`
+  //             );
+  //             results.push({
+  //               symbol,
+  //               side: "SELL",
+  //               success: false,
+  //               skipped: true,
+  //               reason: `Valor de venta (${valorVenta.toFixed(
+  //                 2
+  //               )}) menor que mínimo (${minNotional})`,
+  //               confidence: combinedSignal.confidence,
+  //             });
+  //             continue;
+  //           }
 
-            console.log(
-              `✅ Vendiendo ${cantidadAVender} de ${symbol} correspondiente a compra ${compra.id}...`
-            );
-            const sellResult = await this.placeSellOrder(credentials, {
-              symbol,
-              quantity: cantidadAVender,
-              type: "MARKET",
-            });
+  //           console.log(
+  //             `✅ Vendiendo ${cantidadAVender} de ${symbol} correspondiente a compra ${compra.id}...`
+  //           );
+  //           const sellResult = await this.placeSellOrder(credentials, {
+  //             symbol,
+  //             quantity: cantidadAVender,
+  //             type: "MARKET",
+  //           });
 
-            if (sellResult.success) {
-              console.log(
-                `✅ Orden de venta ejecutada para compra ${compra.id}`
-              );
-              this.lastTradeTime.set(symbol, Date.now());
+  //           if (sellResult.success) {
+  //             console.log(
+  //               `✅ Orden de venta ejecutada para compra ${compra.id}`
+  //             );
+  //             this.lastTradeTime.set(symbol, Date.now());
 
-              let dbSaved = false;
-              try {
-                // Calcular comisiones y precio promedio de venta
-                let comisionTotalVenta = 0;
-                let comisionMonedaVenta = "";
-                let precioVentaReal = 0;
+  //             let dbSaved = false;
+  //             try {
+  //               // Calcular comisiones y precio promedio de venta
+  //               let comisionTotalVenta = 0;
+  //               let comisionMonedaVenta = "";
+  //               let precioVentaReal = 0;
 
-                if (
-                  sellResult.order.fills &&
-                  sellResult.order.fills.length > 0
-                ) {
-                  let totalCantidad = 0;
-                  let totalValor = 0;
-                  sellResult.order.fills.forEach((fill: any) => {
-                    const cantidad = parseFloat(fill.qty);
-                    const precio = parseFloat(fill.price);
-                    totalCantidad += cantidad;
-                    totalValor += cantidad * precio;
+  //               if (
+  //                 sellResult.order.fills &&
+  //                 sellResult.order.fills.length > 0
+  //               ) {
+  //                 let totalCantidad = 0;
+  //                 let totalValor = 0;
+  //                 sellResult.order.fills.forEach((fill: any) => {
+  //                   const cantidad = parseFloat(fill.qty);
+  //                   const precio = parseFloat(fill.price);
+  //                   totalCantidad += cantidad;
+  //                   totalValor += cantidad * precio;
 
-                    if (
-                      fill.commissionAsset === "USDC" ||
-                      fill.commissionAsset === "USDT"
-                    ) {
-                      comisionTotalVenta += parseFloat(fill.commission);
-                      comisionMonedaVenta = fill.commissionAsset;
-                    } else if (!comisionMonedaVenta) {
-                      comisionMonedaVenta = fill.commissionAsset;
-                    }
-                  });
-                  precioVentaReal = totalValor / totalCantidad;
-                }
+  //                   if (
+  //                     fill.commissionAsset === "USDC" ||
+  //                     fill.commissionAsset === "USDT"
+  //                   ) {
+  //                     comisionTotalVenta += parseFloat(fill.commission);
+  //                     comisionMonedaVenta = fill.commissionAsset;
+  //                   } else if (!comisionMonedaVenta) {
+  //                     comisionMonedaVenta = fill.commissionAsset;
+  //                   }
+  //                 });
+  //                 precioVentaReal = totalValor / totalCantidad;
+  //               }
 
-                const totalVentaReal = sellResult.order?.cummulativeQuoteQty
-                  ? parseFloat(sellResult.order.cummulativeQuoteQty)
-                  : cantidadAVender * precioVentaReal;
+  //               const totalVentaReal = sellResult.order?.cummulativeQuoteQty
+  //                 ? parseFloat(sellResult.order.cummulativeQuoteQty)
+  //                 : cantidadAVender * precioVentaReal;
 
-                // Calcular beneficio
-                const totalCompra = compra.precio * cantidadAVender;
-                const beneficio = totalVentaReal - totalCompra;
-                const porcentajeBeneficio = (beneficio / totalCompra) * 100;
+  //               // Calcular beneficio
+  //               const totalCompra = compra.precio * cantidadAVender;
+  //               const beneficio = totalVentaReal - totalCompra;
+  //               const porcentajeBeneficio = (beneficio / totalCompra) * 100;
 
-                // Insertar en tabla ventas
-                const datosVenta = {
-                  idCompra: compra.id,
-                  exchange: "Binance",
-                  simbolo: symbol,
-                  precioVenta: precioVentaReal,
-                  cantidadVendida: cantidadAVender,
-                  comisionVenta: comisionTotalVenta,
-                  comisionMoneda: comisionMonedaVenta,
-                  beneficio: beneficio,
-                  porcentajeBeneficio: porcentajeBeneficio,
-                  idUsuario: userId,
-                  fechaVenta: sellResult.order?.transactTime
-                    ? new Date(sellResult.order.transactTime).toISOString()
-                    : new Date().toISOString(),
-                  botS: true,
-                };
+  //               // Insertar en tabla ventas
+  //               const datosVenta = {
+  //                 idCompra: compra.id,
+  //                 exchange: "Binance",
+  //                 simbolo: symbol,
+  //                 precioVenta: precioVentaReal,
+  //                 cantidadVendida: cantidadAVender,
+  //                 comisionVenta: comisionTotalVenta,
+  //                 comisionMoneda: comisionMonedaVenta,
+  //                 beneficio: beneficio,
+  //                 porcentajeBeneficio: porcentajeBeneficio,
+  //                 idUsuario: userId,
+  //                 fechaVenta: sellResult.order?.transactTime
+  //                   ? new Date(sellResult.order.transactTime).toISOString()
+  //                   : new Date().toISOString(),
+  //                 botS: true,
+  //               };
 
-                const { error: errorVenta } = await supabase
-                  .from("ventas")
-                  .insert([datosVenta]);
-                if (errorVenta) {
-                  console.error("⚠️ Error guardando venta en BD:", errorVenta);
-                } else {
-                  console.log("✅ Venta guardada en base de datos");
-                  dbSaved = true;
-                }
+  //               const { error: errorVenta } = await supabase
+  //                 .from("ventas")
+  //                 .insert([datosVenta]);
+  //               if (errorVenta) {
+  //                 console.error("⚠️ Error guardando venta en BD:", errorVenta);
+  //               } else {
+  //                 console.log("✅ Venta guardada en base de datos");
+  //                 dbSaved = true;
+  //               }
 
-                // Marcar la compra como vendida
-                const { error: errorUpdateCompra } = await supabase
-                  .from("compras")
-                  .update({ vendida: true })
-                  .eq("id", compra.id);
+  //               // Marcar la compra como vendida
+  //               const { error: errorUpdateCompra } = await supabase
+  //                 .from("compras")
+  //                 .update({ vendida: true })
+  //                 .eq("id", compra.id);
 
-                if (errorUpdateCompra) {
-                  console.error(
-                    "⚠️ Error actualizando compra:",
-                    errorUpdateCompra
-                  );
-                } else {
-                  console.log("✅ Compra marcada como vendida");
-                }
+  //               if (errorUpdateCompra) {
+  //                 console.error(
+  //                   "⚠️ Error actualizando compra:",
+  //                   errorUpdateCompra
+  //                 );
+  //               } else {
+  //                 console.log("✅ Compra marcada como vendida");
+  //               }
 
-                // Restar del balance disponible (para control interno)
-                balanceDisponible -= cantidadAVender;
-              } catch (dbError) {
-                console.error("⚠️ Error en guardado BD:", dbError);
-              }
+  //               // Restar del balance disponible (para control interno)
+  //               balanceDisponible -= cantidadAVender;
+  //             } catch (dbError) {
+  //               console.error("⚠️ Error en guardado BD:", dbError);
+  //             }
 
-              results.push({
-                symbol,
-                side: "SELL",
-                success: true,
-                order: sellResult.order,
-                dbSaved,
-                confidence: combinedSignal.confidence,
-              });
-            } else {
-              console.error(
-                `❌ Error en venta de compra ${compra.id}:`,
-                sellResult.error
-              );
-              results.push({
-                symbol,
-                side: "SELL",
-                success: false,
-                error: sellResult.error,
-                confidence: combinedSignal.confidence,
-              });
-              // Si falla una orden, detenemos el proceso para este símbolo (podría afectar el balance)
-              break;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error en executeTrades:", error);
-      throw error;
-    }
+  //             results.push({
+  //               symbol,
+  //               side: "SELL",
+  //               success: true,
+  //               order: sellResult.order,
+  //               dbSaved,
+  //               confidence: combinedSignal.confidence,
+  //             });
+  //           } else {
+  //             console.error(
+  //               `❌ Error en venta de compra ${compra.id}:`,
+  //               sellResult.error
+  //             );
+  //             results.push({
+  //               symbol,
+  //               side: "SELL",
+  //               success: false,
+  //               error: sellResult.error,
+  //               confidence: combinedSignal.confidence,
+  //             });
+  //             // Si falla una orden, detenemos el proceso para este símbolo (podría afectar el balance)
+  //             break;
+  //           }
+  //         }
+  //       }
+  //     }
+  //   } catch (error) {
+  //     console.error("Error en executeTrades:", error);
+  //     throw error;
+  //   }
 
-    return { executed: results };
-  }
+  //   return { executed: results };
+  // }
 }
 
 /**
