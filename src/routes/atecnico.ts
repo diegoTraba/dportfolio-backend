@@ -249,7 +249,7 @@ router.get('/bot/operaciones/:userId', async (req, res) => {
     console.log("operaciones emparejadas ultimas 24h botS: "+emparejadasUltimas24h);
 
     // Total de operaciones
-    const totalOperaciones = compras.length + ventas.length;
+    const totalOperaciones = operacionesPendientes + ventas.length;
 
     // Beneficio total desde activación (suma de beneficio de todas las ventas)
     const beneficioTotal = ventas.reduce((acc, v) => acc + (v.beneficio || 0), 0);
