@@ -182,6 +182,7 @@ class ServicioBot {
     }
 
     if (signal.action === "BUY") {
+
       return await this.processBuySignal(
         credentials,
         userId,
@@ -212,7 +213,7 @@ class ServicioBot {
   /**
    * Calcula los minutos restantes de cooldown para un símbolo.
    */
-  private getCooldownMinutesLeft(symbol: string, cooldownMs: number): string {
+  public getCooldownMinutesLeft(symbol: string, cooldownMs: number): string {
     const lastTrade = this.lastTradeTime.get(symbol);
     if (!lastTrade) return "0";
     const minsLeft = (cooldownMs - (Date.now() - lastTrade)) / 60000;

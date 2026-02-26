@@ -938,24 +938,36 @@ export class ServicioMonitoreo {
       }
     }
 
+    console.log(`✅ indicadores obtenidos. procesando señales por usuario`);
     // ----- 5. PROCESAR CADA USUARIO -----
     for (const userId of usuariosValidos) {
+      console.log(`Procesando usuario ${userId}`);
       const config = this.usuariosBotActivos.get(userId)!;
       const creds = credencialesMap.get(userId)!;
       const cooldownMs = config.cooldownMinutes * 60 * 1000;
 
       const resultadosUsuario = [];
+      const señalesPorSimbolo = new Map<
+        string,
+        {
+          buyCount: number;
+          sellCount: number;
+          buyConfidence: number;
+          sellConfidence: number;
+        }
+      >();
 
+      // Primera pasada: evaluar señales por cada (símbolo, intervalo) y acumular
       for (const simboloConfig of config.simbolos) {
+        const symbol = simboloConfig.symbol;
         for (const interval of config.intervals) {
-          const key = `${simboloConfig.symbol}|${interval}`;
+          const key = `${symbol}|${interval}`;
           const indicadores = indicadoresGlobales.get(key);
           if (!indicadores) {
             console.warn(`No hay indicadores para ${key}, se omite`);
             continue;
           }
 
-          // Evaluar señal
           const señal = binanceService.evaluateSignals(
             indicadores.closes,
             indicadores.ema7,
@@ -966,22 +978,79 @@ export class ServicioMonitoreo {
 
           if (señal.action === "NONE" || señal.confidence < 0.5) continue;
 
-          // Ejecutar orden
-          const resultado = await servicioBot.ejecutarOrdenSegunSenial(
-            creds,
-            userId,
-            simboloConfig.symbol,
-            señal as { action: "BUY" | "SELL"; confidence: number },
-            config.tradeAmountUSD,
-            config.maxInversion,
-            simboloConfig.lowerLimit,
-            simboloConfig.upperLimit,
-            cooldownMs
-          );
-
-          if (resultado?.success) {
-            resultadosUsuario.push(resultado);
+          if (!señalesPorSimbolo.has(symbol)) {
+            señalesPorSimbolo.set(symbol, {
+              buyCount: 0,
+              sellCount: 0,
+              buyConfidence: 0,
+              sellConfidence: 0,
+            });
           }
+          const acc = señalesPorSimbolo.get(symbol)!;
+          if (señal.action === "BUY") {
+            acc.buyCount++;
+            acc.buyConfidence += señal.confidence;
+          } else {
+            // SELL
+            acc.sellCount++;
+            acc.sellConfidence += señal.confidence;
+          }
+        }
+      }
+
+      // Segunda pasada: para cada símbolo, decidir acción consolidada
+      for (const [symbol, acc] of señalesPorSimbolo.entries()) {
+        const simboloConfig = config.simbolos.find((s) => s.symbol === symbol);
+        if (!simboloConfig) continue;
+
+        let accionFinal: "BUY" | "SELL" | null = null;
+        let confianzaFinal = 0;
+
+        if (acc.buyCount > 0 && acc.sellCount === 0) {
+          accionFinal = "BUY";
+          confianzaFinal = acc.buyConfidence / acc.buyCount;
+        } else if (acc.sellCount > 0 && acc.buyCount === 0) {
+          accionFinal = "SELL";
+          confianzaFinal = acc.sellConfidence / acc.sellCount;
+        } else if (acc.buyCount > 0 && acc.sellCount > 0) {
+          if(acc.buyCount > acc.sellCount){
+            accionFinal = "BUY";
+            confianzaFinal = acc.buyConfidence / acc.buyCount;
+          } else{
+            accionFinal = "SELL";
+          confianzaFinal = acc.sellConfidence / acc.sellCount;
+          }
+          console.log(
+            `⚖️ Señales mixtas para ${symbol}: ${acc.buyCount} compras, ${acc.sellCount} ventas.`
+          );
+          continue;
+        }
+
+        if (!accionFinal) continue;
+
+        // Verificar cooldown (ahora por símbolo)
+        // if (servicioBot.isCooldownActive(symbol, cooldownMs)) {
+        //   const minsLeft = servicioBot.getCooldownMinutesLeft(symbol, cooldownMs);
+        //   console.log(
+        //     `⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`
+        //   );
+        //   continue;
+        // }
+
+        const resultado = await servicioBot.ejecutarOrdenSegunSenial(
+          creds,
+          userId,
+          symbol,
+          { action: accionFinal, confidence: confianzaFinal },
+          config.tradeAmountUSD,
+          config.maxInversion,
+          simboloConfig.lowerLimit,
+          simboloConfig.upperLimit,
+          cooldownMs
+        );
+
+        if (resultado?.success) {
+          resultadosUsuario.push(resultado);
         }
       }
 
