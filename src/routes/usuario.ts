@@ -3,6 +3,7 @@ import { Router, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { servicioUsuario } from "../services/servicioUsuario";
 import { monitorService } from "../services/servicioMonitoreo";
+import { binanceService } from "../services/servicioBinance";
 const router = Router();
 
 // Ruta para obtener los exchanges de un usuario
@@ -66,6 +67,144 @@ router.get("/:userId/cargarventas", async (req: Request, res: Response) => {
       error: "Error interno del servidor al obtener ventas",
       details: error instanceof Error ? error.message : "Error desconocido",
     });
+  }
+});
+
+router.get("/:userId/cargarcompras", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ error: "ID de usuario no proporcionado" });
+    }
+
+    console.log(`👤 Obteniendo compras para usuario ID: ${userId}`);
+
+    // Llamar al servicio para obtener las ventas
+    const compras = await servicioUsuario.obtenerComprasUsuario(userId);
+
+    res.json({
+      success: true,
+      data: compras,
+      count: compras.length,
+      message:
+        compras.length > 0
+          ? "Compras obtenidas correctamente"
+          : "No se encontraron compras para este usuario",
+    });
+  } catch (error) {
+    console.error("💥 Error al obtener compras:", error);
+    res.status(500).json({
+      error: "Error interno del servidor al obtener compras",
+      details: error instanceof Error ? error.message : "Error desconocido",
+    });
+  }
+});
+
+// Obtener compras de un usuario para un símbolo específico
+router.get("/:userId/cargarcompras/:simbolo", async (req: Request, res: Response) => {
+  try {
+    const { userId, simbolo } = req.params;
+    const bots = req.query.bots === "true";
+    const fechaDesde = req.query.fechaDesde as string | undefined;
+
+    if (!userId || !simbolo) {
+      return res.status(400).json({ 
+        error: "ID de usuario y símbolo son requeridos" 
+      });
+    }
+
+    console.log(`👤 Obteniendo compras para usuario ${userId}, símbolo ${simbolo}`);
+
+    const compras = await servicioUsuario.obtenerComprasUsuarioSimbolo(
+      userId, 
+      simbolo, 
+      bots, 
+      fechaDesde
+    );
+
+    res.json({
+      success: true,
+      data: compras,
+      count: compras.length,
+      message: compras.length > 0 
+        ? "Compras obtenidas correctamente" 
+        : "No se encontraron compras para este usuario y símbolo",
+    });
+  } catch (error) {
+    console.error("💥 Error al obtener compras por símbolo:", error);
+    res.status(500).json({
+      error: "Error interno del servidor al obtener compras",
+      details: error instanceof Error ? error.message : "Error desconocido",
+    });
+  }
+});
+
+// Obtener ventas de un usuario para un símbolo específico
+router.get("/:userId/cargarventas/:simbolo", async (req: Request, res: Response) => {
+  try {
+    const { userId, simbolo } = req.params;
+    const bots = req.query.bots === "true";
+    const fechaDesde = req.query.fechaDesde as string | undefined;
+
+    if (!userId || !simbolo) {
+      return res.status(400).json({ 
+        error: "ID de usuario y símbolo son requeridos" 
+      });
+    }
+
+    console.log(`👤 Obteniendo ventas para usuario ${userId}, símbolo ${simbolo}`);
+
+    const ventas = await servicioUsuario.obtenerVentasUsuarioSimbolo(
+      userId, 
+      simbolo, 
+      bots, 
+      fechaDesde
+    );
+
+    res.json({
+      success: true,
+      data: ventas,
+      count: ventas.length,
+      message: ventas.length > 0 
+        ? "Ventas obtenidas correctamente" 
+        : "No se encontraron ventas para este usuario y símbolo",
+    });
+  } catch (error) {
+    console.error("💥 Error al obtener ventas por símbolo:", error);
+    res.status(500).json({
+      error: "Error interno del servidor al obtener ventas",
+      details: error instanceof Error ? error.message : "Error desconocido",
+    });
+  }
+});
+
+router.get('/klines', async (req, res) => {
+  try {
+    const { symbol, interval = '1h', limit = 100 } = req.query;
+
+    if (!symbol) {
+      return res.status(400).json({ error: 'El parámetro symbol es obligatorio' });
+    }
+
+    // Validar intervalo (opcional, pero recomendado)
+    const intervalosPermitidos = [
+      '1m', '3m', '5m', '15m'
+    ];
+    if (!intervalosPermitidos.includes(interval as string)) {
+      return res.status(400).json({ error: 'Intervalo no válido' });
+    }
+
+    const klines = await binanceService.getKlines(
+      symbol as string,
+      interval as string,
+      parseInt(limit as string, 10)
+    );
+
+    res.json(klines); // Devuelve directamente el array transformado
+  } catch (error) {
+    console.error('❌ Error en /api/klines:', error);
+    res.status(500).json({ error: 'Error al obtener datos de mercado' });
   }
 });
 

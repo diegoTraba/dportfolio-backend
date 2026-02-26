@@ -241,58 +241,165 @@ export const servicioUsuario = {
   ): Promise<any[]> => {
     try {
       console.log(`📊 Obteniendo compras para usuario ID: ${userId}`);
-  
+
       const supabase = getSupabaseClient();
-  
-      let query = supabase
-        .from("compras")
-        .select("*")
-        .eq("idUsuario", userId);
-  
+
+      let query = supabase.from("compras").select("*").eq("idUsuario", userId);
+
       if (bots) {
         query = query.eq("botS", true);
       }
-  
+
       if (fechaDesde) {
         query = query.gte("fechaCompra", fechaDesde);
       }
-  
+
       const { data: compras, error } = await query.order("fechaCompra", {
         ascending: false,
       });
-  
+
       if (error) {
         throw new Error(`Error al obtener compras: ${error.message}`);
       }
-  
+
       return compras || [];
     } catch (error) {
-      console.error(`💥 Error al obtener compras para usuario ${userId}:`, error);
+      console.error(
+        `💥 Error al obtener compras para usuario ${userId}:`,
+        error
+      );
       throw error;
     }
   },
 
-  desactivarBotEnCompras: async (userId: string): Promise<{ success: boolean; count: number; error?: string }> => {
+  // Obtener compras de un usuario para un símbolo específico
+  obtenerComprasUsuarioSimbolo: async (
+    userId: string,
+    symbol: string,
+    bots: boolean = false,
+    fechaDesde?: string
+  ): Promise<any[]> => {
+    try {
+      console.log(
+        `📊 Obteniendo compras para usuario ${userId}, símbolo ${symbol}`
+      );
+
+      const supabase = getSupabaseClient();
+
+      let query = supabase
+        .from("compras")
+        .select("*")
+        .eq("idUsuario", userId)
+        .eq("simbolo", symbol); // Ajusta el nombre de la columna si es necesario (p.ej. "symbol")
+
+      if (bots) {
+        query = query.eq("botS", true);
+      }
+
+      if (fechaDesde) {
+        query = query.gte("fechaCompra", fechaDesde);
+      }
+
+      const { data: compras, error } = await query.order("fechaCompra", {
+        ascending: false,
+      });
+
+      if (error) {
+        throw new Error(`Error al obtener compras: ${error.message}`);
+      }
+
+      console.log(
+        `✅ Encontradas ${compras?.length || 0} compras para ${symbol}`
+      );
+      return compras || [];
+    } catch (error) {
+      console.error(
+        `💥 Error al obtener compras de usuario ${userId} para símbolo ${symbol}:`,
+        error
+      );
+      throw error;
+    }
+  },
+
+  // Obtener ventas de un usuario para un símbolo específico
+  obtenerVentasUsuarioSimbolo: async (
+    userId: string,
+    symbol: string,
+    bots: boolean = false,
+    fechaDesde?: string
+  ): Promise<any[]> => {
+    try {
+      console.log(
+        `📊 Obteniendo ventas para usuario ${userId}, símbolo ${symbol}`
+      );
+
+      const supabase = getSupabaseClient();
+
+      let query = supabase
+        .from("ventas")
+        .select(
+          `
+          *,
+          compras:compras(*)
+        `
+        )
+        .eq("idUsuario", userId)
+        .eq("simbolo", symbol); // Ajusta el nombre de la columna
+
+      if (bots) {
+        query = query.eq("botS", true);
+      }
+
+      if (fechaDesde) {
+        query = query.gte("fechaVenta", fechaDesde);
+      }
+
+      const { data: ventas, error } = await query.order("fechaVenta", {
+        ascending: false,
+      });
+
+      if (error) {
+        throw new Error(`Error al obtener ventas: ${error.message}`);
+      }
+
+      console.log(
+        `✅ Encontradas ${ventas?.length || 0} ventas para ${symbol}`
+      );
+      return ventas || [];
+    } catch (error) {
+      console.error(
+        `💥 Error al obtener ventas de usuario ${userId} para símbolo ${symbol}:`,
+        error
+      );
+      throw error;
+    }
+  },
+
+  desactivarBotEnCompras: async (
+    userId: string
+  ): Promise<{ success: boolean; count: number; error?: string }> => {
     try {
       const supabase = getSupabaseClient();
-  
+
       const { data, error } = await supabase
-        .from('compras')
+        .from("compras")
         .update({ botS: false })
-        .eq('idUsuario', userId)
-        .eq('botS', true)
+        .eq("idUsuario", userId)
+        .eq("botS", true)
         .select(); // opcional: para obtener las filas actualizadas
-  
+
       if (error) {
-        console.error('Error al desactivar botS en compras:', error);
+        console.error("Error al desactivar botS en compras:", error);
         return { success: false, count: 0, error: error.message };
       }
-  
+
       const count = data?.length || 0;
-      console.log(`✅ Desactivado botS en ${count} compras para usuario ${userId}`);
+      console.log(
+        `✅ Desactivado botS en ${count} compras para usuario ${userId}`
+      );
       return { success: true, count };
     } catch (error) {
-      console.error('Error inesperado en desactivarBotEnCompras:', error);
+      console.error("Error inesperado en desactivarBotEnCompras:", error);
       return { success: false, count: 0, error: String(error) };
     }
   },
@@ -301,23 +408,23 @@ export const servicioUsuario = {
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
-        .from('compras')
-        .select('total') // o 'precio, cantidad' y luego multiplicar
-        .eq('idUsuario', userId)
-        .eq('botS', true)
-        .eq('vendida', false);
-  
+        .from("compras")
+        .select("total") // o 'precio, cantidad' y luego multiplicar
+        .eq("idUsuario", userId)
+        .eq("botS", true)
+        .eq("vendida", false);
+
       if (error) {
-        console.error('Error al obtener total invertido:', error);
+        console.error("Error al obtener total invertido:", error);
         return 0;
       }
-  
+
       // Sumar los totales (asumiendo que 'total' es el monto en USDC)
       const total = data.reduce((acc, compra) => acc + (compra.total || 0), 0);
       return total;
     } catch (error) {
-      console.error('Error inesperado en obtenerTotalInvertidoBot:', error);
+      console.error("Error inesperado en obtenerTotalInvertidoBot:", error);
       return 0;
     }
-  }
+  },
 };
