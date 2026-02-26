@@ -1,11 +1,11 @@
 import { binanceService } from "./servicioBinance.js";
-import { servicioBot } from "./servicioBotS.js"
+import { servicioBot } from "./servicioBotS.js";
 import { getSupabaseClient } from "../lib/supabase.js";
 import { webSocketService } from "./servicioWebSocket.js";
 import { decrypt } from "../lib/encriptacion.js";
 import { servicioUsuario } from "./servicioUsuario.js";
 import { BinanceCredentials } from "../interfaces/binance.types.js";
-import {SimboloConfig, BotConfig} from "../interfaces/bot.types.js"
+import { SimboloConfig, BotConfig } from "../interfaces/bot.types.js";
 import { randomUUID } from "crypto";
 
 export interface DatosPrecio {
@@ -195,7 +195,7 @@ export class ServicioMonitoreo {
         // Aquí podrías añadir lógica para verificar alertas
         await this.verificarAlertas(precios);
 
-        this.ejecutarBotUsuariosActivos();
+        this.ejecutarBotUsuariosActivos1();
         console.log("✅ Ciclo de monitoreo completado\n");
       } catch (error) {
         console.error("💥 Error en el monitoreo de precios:", error);
@@ -682,21 +682,26 @@ export class ServicioMonitoreo {
       console.log(`⚠️ El bot ya está activo para el usuario ${userId}`);
       return false;
     }
-  
+
     // Procesar los símbolos: pueden ser string[] (antiguo) o SimboloConfig[] (nuevo)
     let simbolosConfig: SimboloConfig[] = [];
     if (config.simbolos) {
       if (Array.isArray(config.simbolos)) {
         // Si el primer elemento es string, convertir cada uno a objeto sin límites
-        if (config.simbolos.length > 0 && typeof config.simbolos[0] === 'string') {
-          simbolosConfig = (config.simbolos as unknown as string[]).map(s => ({ symbol: s }));
+        if (
+          config.simbolos.length > 0 &&
+          typeof config.simbolos[0] === "string"
+        ) {
+          simbolosConfig = (config.simbolos as unknown as string[]).map(
+            (s) => ({ symbol: s })
+          );
         } else {
           // Ya es el nuevo formato
           simbolosConfig = config.simbolos as SimboloConfig[];
         }
       }
     }
-  
+
     const configCompleta: BotConfig = {
       tradeAmountUSD: config.tradeAmountUSD ?? 10,
       intervals: config.intervals ?? ["3m", "5m"],
@@ -706,9 +711,12 @@ export class ServicioMonitoreo {
       fechaActivacion: new Date().toISOString(),
       maxInversion: config.maxInversion ?? 100, // Valor por defecto si no se envía
     };
-  
+
     this.usuariosBotActivos.set(userId, configCompleta);
-    console.log(`✅ Bot activado para el usuario ${userId} con configuración:`, configCompleta);
+    console.log(
+      `✅ Bot activado para el usuario ${userId} con configuración:`,
+      configCompleta
+    );
     return true;
   }
 
@@ -789,7 +797,9 @@ export class ServicioMonitoreo {
           `✅ Bot ejecutado para usuario ${userId}. Operaciones: ${result.executed.length}`
         );
 
-        const operacionesExitosas = result.executed.filter(r => r.success).length;
+        const operacionesExitosas = result.executed.filter(
+          (r) => r.success
+        ).length;
         //Solo notificamos al usuario si se ha realizado alguna operacion
         if (operacionesExitosas > 0) {
           // Notificación vía WebSocket
@@ -804,6 +814,186 @@ export class ServicioMonitoreo {
         }
       } catch (error) {
         console.error(`❌ Error ejecutando bot para usuario ${userId}:`, error);
+      }
+    }
+  }
+
+  private async ejecutarBotUsuariosActivos1() {
+    if (this.usuariosBotActivos.size === 0) return;
+
+    console.log(
+      `🤖 (Optimizado) Ejecutando bot para ${this.usuariosBotActivos.size} usuario(s)...`
+    );
+
+    const supabase = getSupabaseClient();
+    const userIds = Array.from(this.usuariosBotActivos.keys());
+
+    // ----- 1. OBTENER CREDENCIALES DE TODOS LOS USUARIOS -----
+    const { data: exchanges, error } = await supabase
+      .from("exchanges")
+      .select("user_id, api_key, api_secret")
+      .eq("exchange", "BINANCE")
+      .eq("is_active", true)
+      .in("user_id", userIds);
+
+    if (error) {
+      console.error("Error obteniendo credenciales:", error);
+      return;
+    }
+
+    const credencialesMap = new Map<string, BinanceCredentials>();
+    for (const ex of exchanges) {
+      try {
+        credencialesMap.set(ex.user_id, {
+          apiKey: decrypt(ex.api_key),
+          apiSecret: decrypt(ex.api_secret),
+        });
+      } catch (e) {
+        console.error(
+          `Error descifrando credenciales para usuario ${ex.user_id}:`,
+          e
+        );
+      }
+    }
+
+    // ----- 2. RECOPILAR PARES ÚNICOS (símbolo|intervalo) -----
+    const paresUnicos = new Set<string>();
+    const usuariosValidos: string[] = [];
+
+    for (const [userId, config] of this.usuariosBotActivos.entries()) {
+      if (!credencialesMap.has(userId)) {
+        console.warn(
+          `Usuario ${userId} no tiene credenciales válidas, se omite`
+        );
+        continue;
+      }
+      usuariosValidos.push(userId);
+      for (const simbolo of config.simbolos) {
+        for (const interval of config.intervals) {
+          paresUnicos.add(`${simbolo.symbol}|${interval}`);
+        }
+      }
+    }
+
+    if (paresUnicos.size === 0) {
+      console.log("No hay pares válidos para analizar.");
+      return;
+    }
+
+    // ----- 3. OBTENER VELAS PARA CADA PAR ÚNICO (CON LÍMITES DE CONCURRENCIA) -----
+    const limit = 100; // O el valor que uses por defecto; podrías cogerlo de la configuración del primer usuario si todos usan el mismo
+    const klinesMap = new Map<string, any[]>(); // clave: `${symbol}|${interval}`
+    const paresArray = Array.from(paresUnicos);
+    const CONCURRENCIA = 5; // Número de peticiones simultáneas (ajústalo según los límites de Binance)
+
+    console.log(
+      `📡 Obteniendo velas para ${paresArray.length} par(es) único(s)...`
+    );
+
+    for (let i = 0; i < paresArray.length; i += CONCURRENCIA) {
+      const lote = paresArray.slice(i, i + CONCURRENCIA);
+      const resultados = await Promise.allSettled(
+        lote.map(async (par) => {
+          const [symbol, interval] = par.split("|");
+          // Usamos el mismo limit para todos; si cada usuario pudiera tener un limit diferente, habría que ajustarlo
+          const klines = await binanceService.getKlines(
+            symbol,
+            interval,
+            limit
+          );
+          return { par, klines };
+        })
+      );
+
+      for (const res of resultados) {
+        if (res.status === "fulfilled") {
+          klinesMap.set(res.value.par, res.value.klines);
+        } else {
+          console.error("❌ Error obteniendo klines para un par:", res.reason);
+        }
+      }
+    }
+
+    console.log(`✅ Velas obtenidas para ${klinesMap.size} pares.`);
+
+    // ----- 4. CALCULAR INDICADORES COMPLETOS PARA CADA PAR -----
+    const indicadoresGlobales = new Map<
+      string,
+      {
+        closes: number[];
+        ema7: number[];
+        ema21: number[];
+        rsi: number[];
+        macd: { macd: number[]; signal: number[]; histogram: number[] };
+      }
+    >();
+
+    for (const [par, klines] of klinesMap.entries()) {
+      try {
+        const indicadores =
+          binanceService.calcularIndicadoresDesdeVelas(klines);
+        indicadoresGlobales.set(par, indicadores);
+      } catch (error) {
+        console.error(`❌ Error calculando indicadores para ${par}:`, error);
+      }
+    }
+
+    // ----- 5. PROCESAR CADA USUARIO -----
+    for (const userId of usuariosValidos) {
+      const config = this.usuariosBotActivos.get(userId)!;
+      const creds = credencialesMap.get(userId)!;
+      const cooldownMs = config.cooldownMinutes * 60 * 1000;
+
+      const resultadosUsuario = [];
+
+      for (const simboloConfig of config.simbolos) {
+        for (const interval of config.intervals) {
+          const key = `${simboloConfig.symbol}|${interval}`;
+          const indicadores = indicadoresGlobales.get(key);
+          if (!indicadores) {
+            console.warn(`No hay indicadores para ${key}, se omite`);
+            continue;
+          }
+
+          // Evaluar señal
+          const señal = binanceService.evaluateSignals(
+            indicadores.closes,
+            indicadores.ema7,
+            indicadores.ema21,
+            indicadores.rsi,
+            indicadores.macd
+          );
+
+          if (señal.action === "NONE" || señal.confidence < 0.5) continue;
+
+          // Ejecutar orden
+          const resultado = await servicioBot.ejecutarOrdenSegunSenial(
+            creds,
+            userId,
+            simboloConfig.symbol,
+            señal as { action: "BUY" | "SELL"; confidence: number },
+            config.tradeAmountUSD,
+            config.maxInversion,
+            simboloConfig.lowerLimit,
+            simboloConfig.upperLimit,
+            cooldownMs
+          );
+
+          if (resultado?.success) {
+            resultadosUsuario.push(resultado);
+          }
+        }
+      }
+
+      if (resultadosUsuario.length > 0) {
+        webSocketService.enviarNotificacion(userId, {
+          id: "temp_" + randomUUID(),
+          titulo: "Bot ejecutado",
+          tipo: "bot_ejecutado",
+          mensaje: `Bot ejecutado. ${resultadosUsuario.length} operaciones realizadas.`,
+          fecha: new Date().toISOString(),
+          leida: false,
+        });
       }
     }
   }

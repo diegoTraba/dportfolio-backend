@@ -1710,7 +1710,7 @@ class BinanceService {
    * Evalúa señales de compra/venta basadas en EMA, RSI y MACD
    * Devuelve una acción y un nivel de confianza
    */
-  private evaluateSignals(
+  public evaluateSignals(
     closes: number[],
     ema7: number[],
     ema21: number[],
@@ -1897,6 +1897,22 @@ class BinanceService {
 
     const results = await Promise.all(promises);
     return results.filter((r) => r !== null) as any[];
+  }
+
+  public calcularIndicadoresDesdeVelas(klines: any[]): {
+    closes: number[];
+    ema7: number[];
+    ema21: number[];
+    rsi: number[];
+    macd: { macd: number[]; signal: number[]; histogram: number[] };
+  } {
+    const closes = klines.map((k) => k.close);
+    // Calcula las series completas (asumo que tus funciones calculateEMA, etc. devuelven arrays)
+    const ema7 = this.calculateEMA(closes, 7);
+    const ema21 = this.calculateEMA(closes, 21);
+    const rsi = this.calculateRSI(closes, 14);
+    const macd = this.calculateMACD(closes, 12, 26, 9);
+    return { closes, ema7, ema21, rsi, macd };
   }
 
   /**

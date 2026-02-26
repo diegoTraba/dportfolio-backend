@@ -160,6 +160,43 @@ class ServicioBot {
     return { executed: results };
   }
 
+  public async ejecutarOrdenSegunSenial(
+    credentials: BinanceCredentials,
+    userId: string,
+    symbol: string,
+    signal: { action: "BUY" | "SELL"; confidence: number },
+    tradeAmountUSD: number,
+    maxInversion: number,
+    cooldownMs: number,
+    lowerLimit?: number | null,
+    upperLimit?: number | null,
+    
+  ): Promise<any> {
+    // Verificar cooldown (necesitas un mecanismo para almacenar cooldowns por símbolo, quizás un Map en memoria)
+    if (this.isCooldownActive(symbol, cooldownMs)) {
+      const minsLeft = this.getCooldownMinutesLeft(symbol, cooldownMs);
+      console.log(
+        `⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`
+      );
+      return { success: false, reason: "cooldown" };
+    }
+
+    if (signal.action === "BUY") {
+      return await this.processBuySignal(
+        credentials,
+        userId,
+        symbol,
+        signal,
+        tradeAmountUSD,
+        maxInversion,
+        lowerLimit,
+        upperLimit
+      );
+    } else {
+      return await this.processSellSignal(credentials, userId, symbol, signal);
+    }
+  }
+
   // ----------------------------------------------------------------------
   // Métodos auxiliares privados
   // ----------------------------------------------------------------------
@@ -167,7 +204,7 @@ class ServicioBot {
   /**
    * Verifica si el cooldown para un símbolo está activo.
    */
-  private isCooldownActive(symbol: string, cooldownMs: number): boolean {
+  public isCooldownActive(symbol: string, cooldownMs: number): boolean {
     const lastTrade = this.lastTradeTime.get(symbol);
     return !!(lastTrade && Date.now() - lastTrade < cooldownMs);
   }
