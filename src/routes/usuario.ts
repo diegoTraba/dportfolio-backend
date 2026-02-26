@@ -73,15 +73,19 @@ router.get("/:userId/cargarventas", async (req: Request, res: Response) => {
 router.get("/:userId/cargarcompras", async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    const { noVendida } = req.query; // leer query param
 
     if (!userId) {
       return res.status(400).json({ error: "ID de usuario no proporcionado" });
     }
 
-    console.log(`👤 Obteniendo compras para usuario ID: ${userId}`);
+    console.log(`👤 Obteniendo compras para usuario ID: ${userId}, noVendida: ${noVendida}`);
+
+    // Convertir noVendida a booleano (true si el query es "true")
+    const soloNoVendidas = noVendida === "true";
 
     // Llamar al servicio para obtener las ventas
-    const compras = await servicioUsuario.obtenerComprasUsuario(userId);
+    const compras = await servicioUsuario.obtenerComprasUsuario(userId,false,undefined,soloNoVendidas);
 
     res.json({
       success: true,

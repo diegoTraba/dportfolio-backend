@@ -237,7 +237,8 @@ export const servicioUsuario = {
   obtenerComprasUsuario: async (
     userId: string,
     bots: boolean = false,
-    fechaDesde?: string
+    fechaDesde?: string,
+    noVendida: boolean= false
   ): Promise<any[]> => {
     try {
       console.log(`📊 Obteniendo compras para usuario ID: ${userId}`);
@@ -248,6 +249,11 @@ export const servicioUsuario = {
 
       if (bots) {
         query = query.eq("botS", true);
+      }
+
+      //obtener solo las compras no vendidas si se pasa true
+      if(noVendida){
+        query = query.eq("vendida", false);
       }
 
       if (fechaDesde) {
