@@ -908,6 +908,7 @@ export class ServicioMonitoreo {
       for (const res of resultados) {
         if (res.status === "fulfilled") {
           klinesMap.set(res.value.par, res.value.klines);
+          console.log("par correcto: " + res.value.par);
         } else {
           console.error("❌ Error obteniendo klines para un par:", res.reason);
         }
@@ -933,33 +934,45 @@ export class ServicioMonitoreo {
         const indicadores =
           binanceService.calcularIndicadoresDesdeVelas(klines);
         indicadoresGlobales.set(par, indicadores);
+        console.log("obteniendo indicadores para par:" + par);
+        console.log(
+          "closes: " +
+            indicadores.closes +
+            "; ema7: " +
+            indicadores.ema7 +
+            "; ema21: " +
+            indicadores.ema21 +
+            "; RSI: " +
+            indicadores.rsi +
+            ": MACD: " +
+            indicadores.macd.macd +
+            "; MACD signal: " +
+            indicadores.macd.signal
+        );
       } catch (error) {
         console.error(`❌ Error calculando indicadores para ${par}:`, error);
       }
     }
 
     console.log(`✅ indicadores obtenidos. procesando señales por usuario`);
+
     // ----- 5. PROCESAR CADA USUARIO -----
     for (const userId of usuariosValidos) {
       console.log(`Procesando usuario ${userId}`);
       const config = this.usuariosBotActivos.get(userId)!;
       const creds = credencialesMap.get(userId)!;
       const cooldownMs = config.cooldownMinutes * 60 * 1000;
+      const totalIntervalos = config.intervals.length; // Todos los símbolos usan los mismos intervalos
 
       const resultadosUsuario = [];
-      const señalesPorSimbolo = new Map<
-        string,
-        {
-          buyCount: number;
-          sellCount: number;
-          buyConfidence: number;
-          sellConfidence: number;
-        }
-      >();
 
-      // Primera pasada: evaluar señales por cada (símbolo, intervalo) y acumular
+      // Procesar cada símbolo del usuario
       for (const simboloConfig of config.simbolos) {
         const symbol = simboloConfig.symbol;
+        let sumaConfianzaCompra = 0;
+        let sumaConfianzaVenta = 0;
+
+        // Evaluar cada intervalo para este símbolo
         for (const interval of config.intervals) {
           const key = `${symbol}|${interval}`;
           const indicadores = indicadoresGlobales.get(key);
@@ -976,67 +989,44 @@ export class ServicioMonitoreo {
             indicadores.macd
           );
 
+          // Solo acumulamos si la señal es válida (acción no NONE y confianza >= 0.5)
           if (señal.action === "NONE" || señal.confidence < 0.5) continue;
 
-          if (!señalesPorSimbolo.has(symbol)) {
-            señalesPorSimbolo.set(symbol, {
-              buyCount: 0,
-              sellCount: 0,
-              buyConfidence: 0,
-              sellConfidence: 0,
-            });
-          }
-          const acc = señalesPorSimbolo.get(symbol)!;
           if (señal.action === "BUY") {
-            acc.buyCount++;
-            acc.buyConfidence += señal.confidence;
-          } else {
-            // SELL
-            acc.sellCount++;
-            acc.sellConfidence += señal.confidence;
+            sumaConfianzaCompra += señal.confidence;
+          } else if (señal.action === "SELL") {
+            sumaConfianzaVenta += señal.confidence;
           }
         }
-      }
 
-      // Segunda pasada: para cada símbolo, decidir acción consolidada
-      for (const [symbol, acc] of señalesPorSimbolo.entries()) {
-        const simboloConfig = config.simbolos.find((s) => s.symbol === symbol);
-        if (!simboloConfig) continue;
+        // Calcular promedios sobre el total de intervalos
+        const confianzaCompra = sumaConfianzaCompra / totalIntervalos;
+        const confianzaVenta = sumaConfianzaVenta / totalIntervalos;
 
+        // Determinar acción final
         let accionFinal: "BUY" | "SELL" | null = null;
         let confianzaFinal = 0;
 
-        if (acc.buyCount > 0 && acc.sellCount === 0) {
+        if (confianzaCompra > confianzaVenta) {
           accionFinal = "BUY";
-          confianzaFinal = acc.buyConfidence / acc.buyCount;
-        } else if (acc.sellCount > 0 && acc.buyCount === 0) {
+          confianzaFinal = confianzaCompra;
+        } else if (confianzaVenta > confianzaCompra) {
           accionFinal = "SELL";
-          confianzaFinal = acc.sellConfidence / acc.sellCount;
-        } else if (acc.buyCount > 0 && acc.sellCount > 0) {
-          if(acc.buyCount > acc.sellCount){
-            accionFinal = "BUY";
-            confianzaFinal = acc.buyConfidence / acc.buyCount;
-          } else{
-            accionFinal = "SELL";
-          confianzaFinal = acc.sellConfidence / acc.sellCount;
-          }
+          confianzaFinal = confianzaVenta;
+        } else {
+          console.log(`⚖️ Empate de confianza para ${symbol}, no se opera.`);
+          continue;
+        }
+
+        // Opcional: no operar si la confianza final es muy baja
+        if (confianzaFinal < 0.5) {
           console.log(
-            `⚖️ Señales mixtas para ${symbol}: ${acc.buyCount} compras, ${acc.sellCount} ventas.`
+            `Confianza baja (${confianzaFinal}) para ${symbol}, no se opera.`
           );
           continue;
         }
 
-        if (!accionFinal) continue;
-
-        // Verificar cooldown (ahora por símbolo)
-        // if (servicioBot.isCooldownActive(symbol, cooldownMs)) {
-        //   const minsLeft = servicioBot.getCooldownMinutesLeft(symbol, cooldownMs);
-        //   console.log(
-        //     `⏳ Cooldown para ${symbol} (${minsLeft} min restantes). Omitiendo.`
-        //   );
-        //   continue;
-        // }
-
+        // Ejecutar orden
         const resultado = await servicioBot.ejecutarOrdenSegunSenial(
           creds,
           userId,
@@ -1054,6 +1044,7 @@ export class ServicioMonitoreo {
         }
       }
 
+      // Notificar al usuario si hubo operaciones
       if (resultadosUsuario.length > 0) {
         webSocketService.enviarNotificacion(userId, {
           id: "temp_" + randomUUID(),
